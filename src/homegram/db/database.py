@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import sqlite3
 from pathlib import Path
 
 import aiosqlite
@@ -12,14 +14,25 @@ from homegram.db.migrations import migrate
 log = logging.getLogger(__name__)
 
 
+class DatabaseOpenError(RuntimeError):
+    """The database file cannot be created or opened (usually a permissions problem)."""
+
+
 class Database:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
         self._conn: aiosqlite.Connection | None = None
 
     async def connect(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = await aiosqlite.connect(self.path)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._conn = await aiosqlite.connect(self.path)
+        except (OSError, sqlite3.OperationalError) as exc:
+            raise DatabaseOpenError(
+                f"Cannot open the database at {self.path}: make sure {self.path.parent} "
+                f"exists and is writable by uid {os.getuid()} (set DATA_DIR, or PUID/PGID "
+                f"in Docker)"
+            ) from exc
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")

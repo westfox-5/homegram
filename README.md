@@ -76,7 +76,8 @@ From now on, every message written in that topic is added to the list (the bot r
 | `TELEGRAM_BOT_TOKEN` | — | Bot token from BotFather (required) |
 | `ALLOWED_USER_IDS` | empty | Comma-separated Telegram user ids |
 | `ALLOWED_CHAT_IDS` | empty | Comma-separated chat ids |
-| `DATA_DIR` | `/data` | Folder holding `homegram.db` |
+| `DATA_DIR` | `/data` | Folder holding `homegram.db` (used with every backend) |
+| `PUID` / `PGID` | `1000` | Docker only: user/group the bot runs as; `DATA_DIR` is chown'ed to them at startup, so bind mounts owned by root work |
 | `LOG_LEVEL` | `INFO` | Python log level |
 | `SHOPPING_BACKEND` | `sqlite` | `sqlite` (one list per chat) or `homeassistant` |
 | `HA_URL` | — | e.g. `http://homeassistant.local:8123` |

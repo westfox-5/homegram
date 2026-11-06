@@ -20,10 +20,13 @@ RUN useradd --create-home --uid 1000 homegram \
     && mkdir -p /data \
     && chown homegram:homegram /data
 
-USER homegram
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Default DATA_DIR. All configuration comes from environment variables at runtime.
 VOLUME ["/data"]
 
+# The entrypoint fixes DATA_DIR ownership, then runs the bot as PUID:PGID (default 1000).
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["python", "-m", "homegram"]

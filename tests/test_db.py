@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from homegram.db import ChatSettingsRepo, Database, TopicBinding, TopicBindingRepo
+from homegram.db.database import DatabaseOpenError
 from homegram.db.migrations import MIGRATIONS, current_version, migrate
 
 
@@ -44,3 +47,10 @@ async def test_state_survives_restart(db_path: Path) -> None:
         assert await TopicBindingRepo(second).features_for(-100, 7) == ["spesa"]
     finally:
         await second.close()
+
+
+async def test_unusable_path_gives_a_clear_error(tmp_path: Path) -> None:
+    not_a_dir = tmp_path / "file"
+    not_a_dir.write_text("")
+    with pytest.raises(DatabaseOpenError, match="writable"):
+        await Database(not_a_dir / "homegram.db").connect()
