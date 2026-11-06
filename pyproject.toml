@@ -1,6 +1,6 @@
 [project]
 name = "homegram"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "A modular Telegram bot for your home: shopping list, forum topics, optional Home Assistant integration."
 readme = "README.md"
 license = "MIT"
