@@ -21,9 +21,9 @@ RUN useradd --create-home --uid 1000 homegram \
     && chown homegram:homegram /data
 
 USER homegram
-ENV PATH="/app/.venv/bin:$PATH" \
-    DATA_DIR=/data
+ENV PATH="/app/.venv/bin:$PATH"
 
+# Default DATA_DIR. All configuration comes from environment variables at runtime.
 VOLUME ["/data"]
 
 CMD ["python", "-m", "homegram"]

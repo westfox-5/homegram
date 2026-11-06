@@ -1,13 +1,18 @@
 services:
   homegram:
-    build: .
-    # Or use the prebuilt image instead of building locally:
-    # image: ghcr.io/westfox-5/homegram:latest
+    image: ghcr.io/westfox-5/homegram:${HOMEGRAM_VERSION:-latest}
+    # To build from source instead: docker compose build (or uncomment the next line)
+    # build: .
     container_name: homegram
+    # All configuration is read from .env (see .env.example).
     env_file: .env
     volumes:
       # The SQLite database lives here: it survives restarts and upgrades.
       - homegram-data:/data
+    extra_hosts:
+      # Lets HA_URL=http://host.docker.internal:8123 reach a Home Assistant
+      # running on the same host (e.g. a container with network_mode: host).
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
 volumes:

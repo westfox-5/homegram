@@ -50,10 +50,14 @@ Restart the bot after changing `.env`.
 
 ### 3. Run with Docker
 
+The compose file runs the prebuilt image from GHCR (`linux/amd64` and `linux/arm64`). Everything is configured through `.env`; nothing is baked into the image.
+
 ```bash
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f
 ```
+
+Pin a version with `HOMEGRAM_VERSION=0.1.0-alpha.1` in `.env`, or build from source with `docker compose build`.
 
 ### 4. Set up topics
 
@@ -78,6 +82,7 @@ From now on, every message written in that topic is added to the list (the bot r
 | `HA_URL` | — | e.g. `http://homeassistant.local:8123` |
 | `HA_TOKEN` | — | Home Assistant long-lived access token |
 | `HA_SHOPPING_ENTITY` | `todo.shopping_list` | To-do entity used by the `homeassistant` backend |
+| `HOMEGRAM_VERSION` | `latest` | Image tag used by `docker-compose.yml` |
 
 If both whitelists are empty, the bot ignores everyone except for `/id`.
 
@@ -85,7 +90,15 @@ If both whitelists are empty, the bot ignores everyone except for `/id`.
 
 1. In Home Assistant, open your profile → **Security** → **Long-lived access tokens** → create one.
 2. Make sure you have a to-do list entity, e.g. the built-in **Shopping List** integration (`todo.shopping_list`).
-3. Set `HA_URL`, `HA_TOKEN` and `SHOPPING_BACKEND=homeassistant`.
+3. Set `HA_URL`, `HA_TOKEN` and `SHOPPING_BACKEND=homeassistant` in `.env`, then `docker compose up -d`.
+
+`HA_URL` must be reachable from inside the HomeGram container:
+
+| Where Home Assistant runs | `HA_URL` |
+| --- | --- |
+| Same host, e.g. a container with `network_mode: host` | `http://host.docker.internal:8123` (mapped by `extra_hosts` in `docker-compose.yml`) |
+| Same compose project / Docker network | `http://<service-name>:8123` |
+| Another machine on the LAN | `http://<ip>:8123` |
 
 The list is then shared with the Home Assistant app and every chat. `/ping` reports whether Home Assistant is reachable.
 
