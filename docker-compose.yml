@@ -4,7 +4,18 @@ services:
     # To build from source instead: docker compose build (or uncomment the next line)
     # build: .
     container_name: homegram
-    # All configuration is read from .env (see .env.example).
+    # Values come from the environment of `docker compose` (a .env file next to this
+    # file, or the variables set in Portainer & co.). See .env.example.
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
+      ALLOWED_USER_IDS: ${ALLOWED_USER_IDS:-}
+      ALLOWED_CHAT_IDS: ${ALLOWED_CHAT_IDS:-}
+      DATA_DIR: ${DATA_DIR:-/data}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SHOPPING_BACKEND: ${SHOPPING_BACKEND:-sqlite}
+      HA_URL: ${HA_URL:-}
+      HA_TOKEN: ${HA_TOKEN:-}
+      HA_SHOPPING_ENTITY: ${HA_SHOPPING_ENTITY:-todo.shopping_list}
     volumes:
       # The SQLite database lives here: it survives restarts and upgrades.
       - homegram-data:/data
