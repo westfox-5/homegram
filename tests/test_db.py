@@ -1,0 +1,46 @@
+from pathlib import Path
+
+from homegram.db import ChatSettingsRepo, Database, TopicBinding, TopicBindingRepo
+from homegram.db.migrations import MIGRATIONS, current_version, migrate
+
+
+async def test_migrations_are_idempotent(db: Database) -> None:
+    assert await current_version(db.conn) == len(MIGRATIONS)
+    assert await migrate(db.conn) == len(MIGRATIONS)
+
+
+async def test_topic_bindings(db: Database) -> None:
+    repo = TopicBindingRepo(db)
+    assert await repo.bind(-100, 7, "spesa", 1) is True
+    assert await repo.bind(-100, 7, "spesa", 1) is False
+    assert await repo.features_for(-100, 7) == ["spesa"]
+    assert await repo.features_for(-100, 8) == []
+    assert await repo.for_chat(-100) == [TopicBinding(-100, 7, "spesa")]
+    assert await repo.unbind(-100, 7, "spesa") is True
+    assert await repo.unbind(-100, 7, "spesa") is False
+    assert await repo.features_for(-100, 7) == []
+
+
+async def test_chat_settings(db: Database) -> None:
+    repo = ChatSettingsRepo(db)
+    assert await repo.get(1, "k") is None
+    await repo.set(1, "k", "a")
+    await repo.set(1, "k", "b")
+    assert await repo.get(1, "k") == "b"
+    assert await repo.get(2, "k") is None
+    await repo.delete(1, "k")
+    assert await repo.get(1, "k") is None
+
+
+async def test_state_survives_restart(db_path: Path) -> None:
+    first = Database(db_path)
+    await first.connect()
+    await TopicBindingRepo(first).bind(-100, 7, "spesa", 1)
+    await first.close()
+
+    second = Database(db_path)
+    await second.connect()
+    try:
+        assert await TopicBindingRepo(second).features_for(-100, 7) == ["spesa"]
+    finally:
+        await second.close()

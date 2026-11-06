@@ -1,0 +1,14 @@
+services:
+  homegram:
+    build: .
+    # Or use the prebuilt image instead of building locally:
+    # image: ghcr.io/westfox-5/homegram:latest
+    container_name: homegram
+    env_file: .env
+    volumes:
+      # The SQLite database lives here: it survives restarts and upgrades.
+      - homegram-data:/data
+    restart: unless-stopped
+
+volumes:
+  homegram-data:

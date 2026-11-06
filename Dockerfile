@@ -1,0 +1,29 @@
+FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.8.17 /uv /usr/local/bin/uv
+
+ENV PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /app
+
+# Dependencies first, for better layer caching.
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY src ./src
+RUN uv sync --frozen --no-dev
+
+RUN useradd --create-home --uid 1000 homegram \
+    && mkdir -p /data \
+    && chown homegram:homegram /data
+
+USER homegram
+ENV PATH="/app/.venv/bin:$PATH" \
+    DATA_DIR=/data
+
+VOLUME ["/data"]
+
+CMD ["python", "-m", "homegram"]

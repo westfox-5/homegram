@@ -1,0 +1,44 @@
+[project]
+name = "homegram"
+version = "0.1.0"
+description = "A modular Telegram bot for your home: shopping list, forum topics, optional Home Assistant integration."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "python-telegram-bot>=21.6,<23",
+    "aiosqlite>=0.20",
+    "httpx>=0.27",
+    "pydantic-settings>=2.7",
+]
+
+[project.scripts]
+homegram = "homegram.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/homegram"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC", "RUF"]
+ignore = ["RUF001"]
