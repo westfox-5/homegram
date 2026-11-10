@@ -54,6 +54,13 @@ async def _post_init(app: Application) -> None:
         tracker=tracker,
     )
 
+    if tracker is not None:
+        # Rewrite the notification automation so template changes in a new release reach HA.
+        try:
+            await tracker.sync_automation()
+        except Exception:
+            log.warning("Could not refresh the tracker automation on startup", exc_info=True)
+
     commands = [BotCommand(cmd, desc) for f in features for cmd, desc in f.commands]
     await app.bot.set_my_commands(commands)
 

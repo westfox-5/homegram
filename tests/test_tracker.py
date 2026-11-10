@@ -438,3 +438,14 @@ def test_render_notifications() -> None:
     assert "🔕 U7 Pro Wall" in text and "🔔 Switch" in text
     data = [b.callback_data for r in markup.inline_keyboard for b in r]
     assert data[0] == "trn:off" and "trn:dev:1" in data and "trn:prod:1" in data
+
+
+def test_price_notification_threshold_and_dots() -> None:
+    config = notifications.build(
+        ["sensor.a"], notifications.NotificationSettings(targets=["mobile_app_s24"])
+    )
+    conditions = " ".join(c["value_template"] for c in config["conditions"])
+    assert f"abs >= {notifications.PRICE_THRESHOLD}" in conditions
+    assert "delta" in config["triggers"][0]["variables"]
+    title = config["actions"][0]["data"]["title"]
+    assert "🔴" in title and "🟢" in title and "💶" not in title

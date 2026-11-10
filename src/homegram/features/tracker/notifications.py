@@ -15,6 +15,8 @@ from typing import Any
 
 NOTIFY_PREFIX = "notify."
 MOBILE_APP_PREFIX = "mobile_app_"
+# Smallest price change (in the sensor's currency, €) worth a notification.
+PRICE_THRESHOLD = 5
 
 # Lower-case fragments of availability texts meaning "out of stock" (keep in sync with shops).
 _OUT_OF_STOCK = (
@@ -47,6 +49,10 @@ TRIGGER_VARIABLES: dict[str, str] = {
         "{{ config_entry_attr(config_entry_id(trigger.entity_id), 'title') "
         "or '/dashboard-tracker' }}"
     ),
+    "delta": (
+        "{{ (trigger.to_state.state | float(0) - trigger.from_state.state | float(0)) | round(2) "
+        "if trigger.from_state and trigger.to_state else 0 }}"
+    ),
     "in_from": _in_stock("from"),
     "in_to": _in_stock("to"),
 }
@@ -62,12 +68,24 @@ CONDITIONS: list[dict[str, Any]] = [
             "and trigger.from_state.state != trigger.to_state.state }}"
         ),
     },
-    # Prices: every change. Stock: only in stock <-> out of stock, not every piece sold.
-    {"condition": "template", "value_template": "{{ kind == 'prezzo' or in_from != in_to }}"},
+    # Prices: only changes of at least PRICE_THRESHOLD. Stock: only in stock <-> out of stock,
+    # not every piece sold.
+    {
+        "condition": "template",
+        "value_template": (
+            "{{ (is_number(trigger.from_state.state) and is_number(trigger.to_state.state) "
+            f"and delta | float(0) | abs >= {PRICE_THRESHOLD}) "
+            "if kind == 'prezzo' else in_from != in_to }}"
+        ),
+    },
 ]
 
 NOTIFY_DATA: dict[str, Any] = {
-    "title": "{{ ('💶 ' if kind == 'prezzo' else ('✅ ' if in_to else '❌ ')) ~ prodotto }}",
+    # Prices: red dot when the price went up, green when it went down.
+    "title": (
+        "{{ (('🔴 ' if delta | float(0) > 0 else '🟢 ') if kind == 'prezzo' "
+        "else ('✅ ' if in_to else '❌ ')) ~ prodotto }}"
+    ),
     "message": (
         "{% if kind == 'prezzo' -%}\n"
         "{%- set f = trigger.from_state.state | float(0) -%}"
