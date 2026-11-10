@@ -8,6 +8,7 @@ A small, modular Telegram bot for your home. Add it to your household group chat
 - 📌 **Topic bindings**: attach a feature to a forum topic. In a topic bound to the shopping list, *any* message is added to the list.
 - 💾 **Persistent state** in a single SQLite file: survives restarts and upgrades.
 - 🏡 **Optional Home Assistant integration**: use a Home Assistant to-do entity as the shopping list.
+- 📈 **Price tracker** *(Home Assistant only)*: track prices and stock of products across shops with `/tracker_aggiungi`; the bot creates the scrapers in Home Assistant for you and can push changes to your phone.
 - 🔒 **Whitelist** of users and chats.
 
 The bot's messages are in Italian (all texts live in [`src/homegram/strings.py`](src/homegram/strings.py), so you can translate them).
@@ -24,6 +25,10 @@ The bot's messages are in Italian (all texts live in [`src/homegram/strings.py`]
 | `/bindings` | List the topic bindings of this chat |
 | `/spesa latte, uova` | Add one or more items (commas, semicolons or new lines separate them). Without arguments it shows the list |
 | `/lista` | Show the shopping list with ✅ buttons |
+| `/tracker` | Prices and stock of the tracked products, with 🗑 buttons to remove a shop *(Home Assistant only)* |
+| `/tracker_aggiungi <product> <link>` | Track a product page. With the name of a product already tracked, adds another shop *(Home Assistant only)* |
+| `/tracker_rimuovi <product>` | Stop tracking a product and delete all its scrapers *(Home Assistant only)* |
+| `/tracker_notifiche` | Choose which devices get notified and for which products, or turn notifications off *(Home Assistant only)* |
 
 ## Quick start
 
@@ -83,6 +88,7 @@ From now on, every message written in that topic is added to the list (the bot r
 | `HA_URL` | — | e.g. `http://homeassistant.local:8123` |
 | `HA_TOKEN` | — | Home Assistant long-lived access token |
 | `HA_SHOPPING_ENTITY` | `todo.shopping_list` | To-do entity used by the `homeassistant` backend |
+| `HA_TRACKER_AUTOMATION` | `tracker_notifica` | Id of the Home Assistant automation the price tracker generates for notifications (see below). Empty to disable notifications |
 | `HOMEGRAM_VERSION` | `latest` | Image tag used by `docker-compose.yml` |
 
 If both whitelists are empty, the bot ignores everyone except for `/id`.
@@ -102,6 +108,29 @@ If both whitelists are empty, the bot ignores everyone except for `/id`.
 | Another machine on the LAN | `http://<ip>:8123` |
 
 The list is then shared with the Home Assistant app and every chat. `/ping` reports whether Home Assistant is reachable.
+
+## Price tracker (Home Assistant)
+
+> [!IMPORTANT]
+> The price tracker works **only when the bot is connected to Home Assistant** (`HA_URL` and `HA_TOKEN` set). Without them the `/tracker*` commands are not registered and do not appear in the command menu.
+> The token must belong to a Home Assistant **administrator**: the bot creates and deletes [Scrape](https://www.home-assistant.io/integrations/scrape/) integrations, which requires admin rights.
+
+```
+/tracker_aggiungi U7 Pro Wall https://wisp.store/unifi/10765-ubiquiti-unifi-u7-pro-wall-u7-pro-wall.html
+/tracker_aggiungi U7 Pro Wall https://www.amazon.it/dp/B0D9JTNXNL
+/tracker
+/tracker_notifiche
+/tracker_rimuovi U7 Pro Wall
+```
+
+Supported shops: **wisp.store** and **Amazon** (`.it`, `.de`, `.fr`, `.es`). Shop profiles (URL normalization and CSS selectors) live in [`src/homegram/features/tracker/shops.py`](src/homegram/features/tracker/shops.py).
+
+How it works:
+
+- Each link is a Scrape config entry in Home Assistant (its title is the product URL) with two sensors named `<product> · <shop> · prezzo` and `<product> · <shop> · disponibilità`. Home Assistant is the only source of truth: nothing about the tracker is stored in the bot's database.
+- Home Assistant polls each page every ~10 minutes. Some shops (Amazon) may start blocking requests: the price sensor then becomes *unavailable* instead of showing a wrong value.
+- Dashboards and automations can find every tracked product through the same naming convention, e.g. in a template: `integration_entities('scrape')` + `state_attr(e, 'friendly_name').split(' · ')`, and the URL with `config_entry_attr(config_entry_id(e), 'title')`.
+- **Notifications**: `/tracker_notifiche` lets you pick the devices (every phone or watch with the Home Assistant companion app, i.e. the `notify.mobile_app_*` services), mute single products and turn notifications on or off. A notification is sent when a price changes or a product goes in or out of stock (not for every piece sold). The bot generates a Home Assistant automation for this (id `tracker_notifica`, see `HA_TRACKER_AUTOMATION`) and rewrites it whenever products or settings change, so don't edit it by hand. The settings live in the automation itself: the notify actions are the devices, the `muted` trigger variable lists the muted products, and the automation's on/off state is the main switch.
 
 ## Data and backups
 
@@ -137,7 +166,7 @@ src/homegram/
 ├── strings.py          # user-facing texts
 ├── db/                 # SQLite connection, migrations, repositories
 ├── integrations/       # Home Assistant client
-└── features/           # one module per feature (core, topics, shopping)
+└── features/           # one module per feature (core, topics, shopping, tracker)
 ```
 
 ### Adding a feature
@@ -146,6 +175,7 @@ src/homegram/
 2. Add it to `FEATURES` in [`src/homegram/features/__init__.py`](src/homegram/features/__init__.py).
 3. If it needs new tables, append a migration to [`src/homegram/db/migrations.py`](src/homegram/db/migrations.py) (never edit released ones).
 4. Set `bindable=True` if it can be attached to a topic, then check `ctx.bindings.features_for(chat_id, thread_id)` in your handlers.
+5. Set `requires_homeassistant=True` if it only makes sense with Home Assistant: it is then registered only when `HA_URL` and `HA_TOKEN` are set.
 
 ## License
 

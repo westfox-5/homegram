@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from homegram.db import ChatSettingsRepo, Database, TopicBindingRepo
     from homegram.features.base import Feature
     from homegram.features.shopping.backends import ShoppingBackend
+    from homegram.features.tracker.service import TrackerService
     from homegram.integrations.homeassistant import HomeAssistantClient
 
 CTX_KEY = "homegram"
@@ -27,6 +28,7 @@ class AppContext:
     shopping: ShoppingBackend
     features: list[Feature]
     ha: HomeAssistantClient | None = None
+    tracker: TrackerService | None = None
 
 
 def get_ctx(context: ContextTypes.DEFAULT_TYPE) -> AppContext:

@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     ha_url: str | None = None
     ha_token: str | None = None
     ha_shopping_entity: str = "todo.shopping_list"
+    # UI automation (its id) whose state trigger the tracker keeps in sync with the tracked
+    # sensors. Optional: ignored if the automation does not exist. Empty to disable.
+    ha_tracker_automation: str = "tracker_notifica"
 
     @field_validator("allowed_user_ids", "allowed_chat_ids", mode="before")
     @classmethod

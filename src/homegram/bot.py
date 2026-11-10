@@ -12,12 +12,13 @@ from homegram import auth, strings
 from homegram.config import Settings
 from homegram.context import CTX_KEY, AppContext
 from homegram.db import ChatSettingsRepo, Database, TopicBindingRepo
-from homegram.features import FEATURES
+from homegram.features import enabled_features
 from homegram.features.shopping.backends import (
     HomeAssistantShoppingBackend,
     ShoppingBackend,
     SqliteShoppingBackend,
 )
+from homegram.features.tracker.service import TrackerService
 from homegram.integrations.homeassistant import HomeAssistantClient, HomeAssistantError
 
 log = logging.getLogger(__name__)
@@ -39,17 +40,21 @@ async def _post_init(app: Application) -> None:
     else:
         shopping = SqliteShoppingBackend(db)
 
+    features = enabled_features(ha is not None)
+    tracker = TrackerService(ha, settings.ha_tracker_automation or None) if ha else None
+
     app.bot_data[CTX_KEY] = AppContext(
         settings=settings,
         db=db,
         bindings=TopicBindingRepo(db),
         chat_settings=ChatSettingsRepo(db),
         shopping=shopping,
-        features=FEATURES,
+        features=features,
         ha=ha,
+        tracker=tracker,
     )
 
-    commands = [BotCommand(cmd, desc) for f in FEATURES for cmd, desc in f.commands]
+    commands = [BotCommand(cmd, desc) for f in features for cmd, desc in f.commands]
     await app.bot.set_my_commands(commands)
 
     if not settings.allowed_user_ids and not settings.allowed_chat_ids:
@@ -102,7 +107,7 @@ def build_application(settings: Settings) -> Application:
     )
     app.bot_data[auth.SETTINGS_KEY] = settings
     app.add_handler(TypeHandler(Update, auth.guard), group=-1)
-    for feature in FEATURES:
+    for feature in enabled_features(settings.homeassistant_enabled):
         feature.register(app)
     app.add_error_handler(_on_error)
     return app

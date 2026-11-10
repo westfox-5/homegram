@@ -19,3 +19,5 @@ class Feature:
     bindable: bool = False
     # Shown in /help inside a topic bound to this feature.
     topic_hint: str = ""
+    # Only enabled when Home Assistant is configured (HA_URL and HA_TOKEN).
+    requires_homeassistant: bool = False

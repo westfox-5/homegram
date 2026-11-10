@@ -55,3 +55,77 @@ SHOP_TOPIC_HINT = "Scrivi qui qualsiasi cosa e la aggiungo alla lista. /lista pe
 
 HA_UNAVAILABLE = "⚠️ Home Assistant non è raggiungibile, riprova tra poco."
 GENERIC_ERROR = "⚠️ Qualcosa è andato storto. Riprova."
+
+TRACKER_TITLE = "📈 <b>Tracker prezzi</b> ({count})"
+TRACKER_EMPTY = (
+    "📈 Nessun prodotto tracciato.\n"
+    "Aggiungine uno con <code>/tracker_aggiungi &lt;nome prodotto&gt; &lt;link&gt;</code>."
+)
+TRACKER_FOOTER = (
+    "<i>In grassetto il prezzo migliore tra i negozi con disponibilità. "
+    "Home Assistant aggiorna ogni ~10 min.</i>"
+)
+TRACKER_NO_PRICE = "—"
+TRACKER_STOCK_UNKNOWN = "❔ n.d."
+TRACKER_STOCK_OUT = "❌ esaurito"
+TRACKER_BTN_REFRESH = "🔄 Aggiorna"
+TRACKER_BTN_CONFIRM = "🗑 Sì, elimina"
+TRACKER_BTN_CANCEL = "↩️ Annulla"
+TRACKER_USAGE = (
+    "Uso: <code>/tracker_aggiungi &lt;nome prodotto&gt; &lt;link&gt;</code>\n"
+    "Con il nome di un prodotto già tracciato aggiungi un altro negozio.\n"
+    "Negozi supportati: {shops}"
+)
+TRACKER_REMOVE_USAGE = (
+    "Uso: <code>/tracker_rimuovi &lt;nome prodotto&gt;</code>\n"
+    "Per eliminare un solo negozio usa i pulsanti 🗑 di /tracker."
+)
+TRACKER_ADDED_PRODUCT = "✅ Ora traccio <b>{product}</b> su {shop}."
+TRACKER_ADDED_LINK = "✅ Aggiunto {shop} a <b>{product}</b>."
+TRACKER_NO_VALUE_YET = (
+    "<i>Prezzo non ancora letto: se resta vuoto il negozio potrebbe bloccare lo scraper "
+    "o il link non è una pagina prodotto.</i>"
+)
+TRACKER_NOT_FOUND = "Nessun prodotto tracciato si chiama <b>{product}</b>. Vedi /tracker."
+TRACKER_CONFIRM_PRODUCT = (
+    "Smetto di tracciare <b>{product}</b>? Elimino {count} scraper da Home Assistant."
+)
+TRACKER_CONFIRM_LINK = "Confermi l'eliminazione?"
+TRACKER_CANCELLED = "↩️ Annullato."
+TRACKER_REMOVED_PRODUCT = "🗑 Non traccio più <b>{product}</b>."
+TRACKER_REMOVED_TOAST = "🗑 Eliminato"
+TRACKER_GONE = "Questo scraper non esiste più."
+TRACKER_ERR_SHOP = (
+    "⚠️ Link non supportato: serve la pagina di un prodotto.\nNegozi supportati: {shops}"
+)
+TRACKER_ERR_LONG_NAME = "⚠️ Nome troppo lungo (max {max} caratteri)."
+TRACKER_ERR_DUPLICATE_URL = "ℹ️ Questo link è già tracciato in <b>{product}</b>."
+TRACKER_ERR_DUPLICATE_SHOP = (
+    "ℹ️ <b>{product}</b> ha già un link {shop}. Eliminalo da /tracker per sostituirlo."
+)
+TRACKER_ERR_FLOW = (
+    "⚠️ Home Assistant non ha creato lo scraper (<code>{errors}</code>). "
+    "Controlla che il link si apra."
+)
+TRACKER_ERR_FORBIDDEN = (
+    "⛔️ Home Assistant ha rifiutato la richiesta: il token in <code>HA_TOKEN</code> "
+    "deve essere di un utente <b>amministratore</b> per gestire gli scraper."
+)
+
+TRACKER_NOTIFY_ON = "🔔 <b>Notifiche tracker attive</b>"
+TRACKER_NOTIFY_OFF = "🔕 <b>Notifiche tracker disattivate</b>"
+TRACKER_NOTIFY_HELP = (
+    "<i>Arrivano tramite l'app Home Assistant quando cambia un prezzo o un prodotto "
+    "torna disponibile / si esaurisce. Tocca i pulsanti per cambiare.</i>"
+)
+TRACKER_NOTIFY_DEVICES = "📱 <b>Dispositivi</b>"
+TRACKER_NOTIFY_NO_DEVICES = "<i>Nessun dispositivo con l'app Home Assistant.</i>"
+TRACKER_NOTIFY_PRODUCTS = "📦 <b>Prodotti</b>"
+TRACKER_NOTIFY_NO_PRODUCTS = "<i>Nessun prodotto tracciato.</i>"
+TRACKER_BTN_NOTIFY_ON = "🔔 Attiva notifiche"
+TRACKER_BTN_NOTIFY_OFF = "🔕 Disattiva notifiche"
+TRACKER_ERR_NO_DEVICES = "📱 Scegli prima almeno un dispositivo."
+TRACKER_ERR_NO_PRODUCTS = "📦 Traccia prima almeno un prodotto con /tracker_aggiungi."
+TRACKER_ERR_NOTIFY_DISABLED = (
+    "🔕 Notifiche non configurabili: <code>HA_TRACKER_AUTOMATION</code> è vuoto."
+)
