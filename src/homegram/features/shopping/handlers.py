@@ -1,4 +1,4 @@
-"""Shopping list: /spesa, /lista, inline buttons and free-text adding in a bound topic."""
+"""Shopping list: /spesa, /spesa_aggiungi, inline buttons and free-text adding in a bound topic."""
 
 from __future__ import annotations
 
@@ -141,18 +141,26 @@ async def add_items(
     await refresh_live_list(context, chat_id)
 
 
+def _command_items(update: Update) -> list[str]:
+    parts = (update.effective_message.text or "").split(maxsplit=1)
+    return parse_items(parts[1]) if len(parts) > 1 else []
+
+
 async def spesa_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = update.effective_message.text or ""
-    parts = text.split(maxsplit=1)
-    items = parse_items(parts[1]) if len(parts) > 1 else []
+    """Show the list. With arguments it adds them (kept for `/spesa latte` habits)."""
+    items = _command_items(update)
     if items:
         await add_items(update, context, items, quiet=False)
     else:
         await send_list(update, context)
 
 
-async def lista_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await send_list(update, context)
+async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    items = _command_items(update)
+    if items:
+        await add_items(update, context, items, quiet=False)
+    else:
+        await update.effective_message.reply_text(strings.SHOP_ADD_USAGE, parse_mode=ParseMode.HTML)
 
 
 async def on_topic_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -203,7 +211,9 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 def register(app: Application) -> None:
     app.add_handler(CommandHandler("spesa", spesa_command))
-    app.add_handler(CommandHandler("lista", lista_command))
+    app.add_handler(CommandHandler("spesa_aggiungi", add_command))
+    # Old name of /spesa, kept as a hidden alias.
+    app.add_handler(CommandHandler("lista", send_list))
     app.add_handler(CallbackQueryHandler(on_callback, pattern=rf"^{CALLBACK_PREFIX}:"))
     app.add_handler(
         MessageHandler(
@@ -219,8 +229,8 @@ FEATURE = Feature(
     description="Lista della spesa condivisa",
     register=register,
     commands=[
-        ("spesa", "aggiungi alla lista, es. /spesa latte, uova"),
-        ("lista", "mostra la lista della spesa"),
+        ("spesa", "mostra la lista della spesa"),
+        ("spesa_aggiungi", "aggiungi alla lista, es. /spesa_aggiungi latte, uova"),
     ],
     bindable=True,
     topic_hint=strings.SHOP_TOPIC_HINT,

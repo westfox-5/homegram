@@ -25,7 +25,7 @@ def test_application_registers_feature_commands(monkeypatch: pytest.MonkeyPatch)
     registered = registered_commands(app)
     declared = {cmd for feature in enabled_features(False) for cmd, _ in feature.commands}
     assert declared <= registered
-    assert {"start", "lista", "spesa", "bind"} <= registered
+    assert {"start", "spesa", "spesa_aggiungi", "lista", "bind"} <= registered
     # Without Home Assistant the tracker is not available at all.
     assert not TRACKER_COMMANDS & registered
 

@@ -4,12 +4,14 @@ A small, modular Telegram bot for your home. Add it to your household group chat
 
 **Features (v0.1)**
 
-- 🛒 **Shared shopping list**: add items with `/spesa`, tick them off with inline buttons, clear completed ones.
+- 🛒 **Shared shopping list**: add items with `/spesa_aggiungi`, see the list with `/spesa`, tick them off with inline buttons, clear completed ones.
 - 📌 **Topic bindings**: attach a feature to a forum topic. In a topic bound to the shopping list, *any* message is added to the list.
 - 💾 **Persistent state** in a single SQLite file: survives restarts and upgrades.
 - 🏡 **Optional Home Assistant integration**: use a Home Assistant to-do entity as the shopping list.
 - 📈 **Price tracker** *(Home Assistant only)*: track prices and stock of products across shops with `/tracker_aggiungi`; the bot creates the scrapers in Home Assistant for you and can push changes to your phone.
 - 🔒 **Whitelist** of users and chats.
+
+Commands are grouped by feature: each feature has a main command (`/spesa`, `/tracker`) and sub-commands prefixed with its name (`/spesa_aggiungi`, `/tracker_aggiungi`, …). The old `/lista` and `/spesa <items>` still work as aliases.
 
 The bot's messages are in Italian (all texts live in [`src/homegram/strings.py`](src/homegram/strings.py), so you can translate them).
 
@@ -23,8 +25,8 @@ The bot's messages are in Italian (all texts live in [`src/homegram/strings.py`]
 | `/bind <feature>` | Attach a feature to the current topic (e.g. `/bind spesa`) |
 | `/unbind <feature>` | Detach a feature from the current topic |
 | `/bindings` | List the topic bindings of this chat |
-| `/spesa latte, uova` | Add one or more items (commas, semicolons or new lines separate them). Without arguments it shows the list |
-| `/lista` | Show the shopping list with ✅ buttons |
+| `/spesa` | Show the shopping list with ✅ buttons |
+| `/spesa_aggiungi latte, uova` | Add one or more items (commas, semicolons or new lines separate them) |
 | `/tracker` | Prices and stock of the tracked products, with 🗑 buttons to remove a shop *(Home Assistant only)* |
 | `/tracker_aggiungi <product> <link>` | Track a product page. With the name of a product already tracked, adds another shop *(Home Assistant only)* |
 | `/tracker_rimuovi <product>` | Stop tracking a product and delete all its scrapers *(Home Assistant only)* |
@@ -72,7 +74,7 @@ In your group, open the topic you want to use for groceries (e.g. "🛒 Spesa") 
 /bind spesa
 ```
 
-From now on, every message written in that topic is added to the list (the bot reacts with 👍). Use `/lista` to see it and tick items off.
+From now on, every message written in that topic is added to the list (the bot reacts with 👍). Use `/spesa` to see it and tick items off.
 
 ## Configuration
 

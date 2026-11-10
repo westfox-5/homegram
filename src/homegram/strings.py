@@ -51,7 +51,11 @@ SHOP_DONE = "✅ Fatto!"
 SHOP_NOT_FOUND = "Elemento non trovato (forse è già stato spuntato)."
 SHOP_CLEARED = "🧹 Rimossi {count} completati"
 SHOP_CLEARED_UNKNOWN = "🧹 Completati rimossi"
-SHOP_TOPIC_HINT = "Scrivi qui qualsiasi cosa e la aggiungo alla lista. /lista per vederla."
+SHOP_TOPIC_HINT = "Scrivi qui qualsiasi cosa e la aggiungo alla lista. /spesa per vederla."
+SHOP_ADD_USAGE = (
+    "Uso: <code>/spesa_aggiungi latte, uova</code> (virgole, punti e virgola o a capo "
+    "separano le voci)."
+)
 
 HA_UNAVAILABLE = "⚠️ Home Assistant non è raggiungibile, riprova tra poco."
 GENERIC_ERROR = "⚠️ Qualcosa è andato storto. Riprova."
