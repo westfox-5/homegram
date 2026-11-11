@@ -141,7 +141,7 @@ TRACKER_NOTIFY_NOWHERE = (
     "vuoi riceverle (<code>/unbind tracker</code> per smettere)."
 )
 TRACKER_NOTIFY_HELP = (
-    "<i>Cambi di prezzo di almeno 5 € (🔴 aumento, 🟢 calo) e prodotti che tornano "
+    "<i>Cambi di prezzo di almeno 1 € (🔴 aumento, 🟢 calo) e prodotti che tornano "
     "disponibili o si esauriscono. Tocca un prodotto per silenziarlo.</i>"
 )
 TRACKER_BTN_MUTE = "🔕 Silenzia questo prodotto"

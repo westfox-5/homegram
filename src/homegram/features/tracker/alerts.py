@@ -15,7 +15,7 @@ from homegram.features.tracker.service import SEPARATOR
 from homegram.features.tracker.shops import KIND_PRICE, in_stock
 
 # Smallest price change (EUR) worth a notification.
-PRICE_THRESHOLD = 5.0
+PRICE_THRESHOLD = 1.0
 
 _BAD_STATES = ("unknown", "unavailable", "none", "")
 

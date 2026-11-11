@@ -154,7 +154,7 @@ How it works:
 - Each link is a Scrape config entry in Home Assistant (its title is the product URL) with two sensors named `<product> · <shop> · prezzo` and `<product> · <shop> · disponibilità`. Home Assistant is the only source of truth: nothing about the tracker is stored in the bot's database.
 - Home Assistant polls each page every ~10 minutes. Some shops (Amazon) may start blocking requests: the price sensor then becomes *unavailable* instead of showing a wrong value.
 - Dashboards and automations can find every tracked product through the same naming convention, e.g. in a template: `integration_entities('scrape')` + `state_attr(e, 'friendly_name').split(' · ')`, and the URL with `config_entry_attr(config_entry_id(e), 'title')`.
-- **Notifications** go to the topics bound with `/bind tracker` (`/unbind tracker` to stop): a price change of at least 5 € (🔴 up, 🟢 down), or a product going in or out of stock (not every piece sold). Each one has a button to mute that product; `/tracker_notifiche` shows where they go and mutes or unmutes products. Muted products are stored in the bot's database (imported once from the old `tracker_notifica` automation, see `HA_TRACKER_AUTOMATION`).
+- **Notifications** go to the topics bound with `/bind tracker` (`/unbind tracker` to stop): a price change of at least 1 € (🔴 up, 🟢 down), or a product going in or out of stock (not every piece sold). Each one has a button to mute that product; `/tracker_notifiche` shows where they go and mutes or unmutes products. Muted products are stored in the bot's database (imported once from the old `tracker_notifica` automation, see `HA_TRACKER_AUTOMATION`).
 
 ## Notifications from Home Assistant
 
@@ -162,7 +162,7 @@ Some features post Home Assistant events to a topic. Bind each one to the topic 
 
 | Feature | Sends |
 | --- | --- |
-| `tracker` | Price (±5 €) and stock changes of the tracked products |
+| `tracker` | Price (±1 €) and stock changes of the tracked products |
 | `pulizie` | The robot vacuum starts cleaning (once, not when it goes back to wash the mop), is stuck or in error for a minute, a part drops below `VACUUM_PARTS_THRESHOLD` |
 | `energia` | Solar surplus (export above `ENERGY_SURPLUS_KW` for 10 minutes, once a day), daily report at `ENERGY_REPORT_TIME` |
 | `bidoni` | At `WASTE_REMINDER_TIME`, if something is collected tomorrow: what to put out, with ✅ Fatto / 👌 Non serve buttons. Repeated at `WASTE_REPEAT_TIME` if nobody tapped them |
