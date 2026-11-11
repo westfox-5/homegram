@@ -68,6 +68,24 @@ class TopicBindingRepo:
                 for r in await cur.fetchall()
             ]
 
+    async def set_topic_name(self, chat_id: int, thread_id: int, name: str) -> None:
+        """Remember a topic's name (the Bot API has no call to look it up)."""
+        await self._db.conn.execute(
+            "INSERT INTO forum_topics (chat_id, thread_id, name) VALUES (?, ?, ?) "
+            "ON CONFLICT (chat_id, thread_id) DO UPDATE SET name = excluded.name "
+            "WHERE name != excluded.name",
+            (chat_id, thread_id, name),
+        )
+        await self._db.conn.commit()
+
+    async def topic_name(self, chat_id: int, thread_id: int) -> str | None:
+        async with self._db.conn.execute(
+            "SELECT name FROM forum_topics WHERE chat_id = ? AND thread_id = ?",
+            (chat_id, thread_id),
+        ) as cur:
+            row = await cur.fetchone()
+        return row["name"] if row else None
+
 
 # chat_id used by ChatSettingsRepo for bot-wide settings.
 GLOBAL_CHAT = 0

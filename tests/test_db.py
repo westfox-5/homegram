@@ -54,3 +54,11 @@ async def test_unusable_path_gives_a_clear_error(tmp_path: Path) -> None:
     not_a_dir.write_text("")
     with pytest.raises(DatabaseOpenError, match="writable"):
         await Database(not_a_dir / "homegram.db").connect()
+
+
+async def test_topic_names(db: Database) -> None:
+    repo = TopicBindingRepo(db)
+    assert await repo.topic_name(-100, 598) is None
+    await repo.set_topic_name(-100, 598, "Tracker")
+    await repo.set_topic_name(-100, 598, "Tracker prezzi")  # renamed
+    assert await repo.topic_name(-100, 598) == "Tracker prezzi"

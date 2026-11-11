@@ -37,6 +37,15 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (chat_id, key)
     );
     """,
+    # v2 — names of forum topics, learned from the messages the bot sees
+    """
+    CREATE TABLE forum_topics (
+        chat_id   INTEGER NOT NULL,
+        thread_id INTEGER NOT NULL,
+        name      TEXT    NOT NULL,
+        PRIMARY KEY (chat_id, thread_id)
+    );
+    """,
 ]
 
 

@@ -4,13 +4,31 @@ from __future__ import annotations
 
 import html
 
-from telegram import Chat, InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Update
+from telegram import (
+    Chat,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions,
+    Message,
+    Update,
+)
 from telegram.constants import ParseMode
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from homegram import prompts, strings
 from homegram.context import AppContext, get_ctx, thread_id_of
+from homegram.db import TopicBindingRepo
 from homegram.features.base import Feature
+
+# After every feature: only learns topic names, never stops other handlers.
+TOPIC_NAME_GROUP = 50
 
 
 def _bindable(ctx: AppContext) -> list[str]:
@@ -23,6 +41,44 @@ def topic_link(chat_id: int, thread_id: int) -> str | None:
     if not raw.startswith("-100") or not thread_id:
         return None
     return f"https://t.me/c/{raw[4:]}/{thread_id}"
+
+
+def topic_name_of(message: Message | None) -> str | None:
+    """The topic's name, when the message carries it.
+
+    A message sent in a topic (not as a reply to another message) replies to the topic's
+    creation message, which has the name; renaming a topic sends a service message.
+    """
+    if message is None:
+        return None
+    if message.forum_topic_created:
+        return message.forum_topic_created.name
+    if message.forum_topic_edited and message.forum_topic_edited.name:
+        return message.forum_topic_edited.name
+    reply = message.reply_to_message
+    if message.is_topic_message and reply is not None and reply.forum_topic_created:
+        return reply.forum_topic_created.name
+    return None
+
+
+async def remember_topic_name(bindings: TopicBindingRepo, message: Message | None) -> None:
+    name = topic_name_of(message)
+    if message is not None and name and message.message_thread_id:
+        await bindings.set_topic_name(message.chat_id, message.message_thread_id, name)
+
+
+async def topic_label(bindings: TopicBindingRepo, chat_id: int, thread_id: int) -> str:
+    """HTML label of a topic: its name (or number), linked to it when possible."""
+    if thread_id == 0:
+        return strings.BINDINGS_GENERAL
+    name = await bindings.topic_name(chat_id, thread_id)
+    label = html.escape(name) if name else strings.BINDINGS_TOPIC.format(thread_id=thread_id)
+    link = topic_link(chat_id, thread_id)
+    return f'<a href="{link}">{label}</a>' if link else label
+
+
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await remember_topic_name(get_ctx(context).bindings, update.effective_message)
 
 
 CALLBACK_PREFIX = "tpc"
@@ -134,13 +190,7 @@ async def bindings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     lines = [strings.BINDINGS_HEADER]
     for b in bindings:
-        if b.thread_id == 0:
-            where = strings.BINDINGS_GENERAL
-        else:
-            where = strings.BINDINGS_TOPIC.format(thread_id=b.thread_id)
-            link = topic_link(b.chat_id, b.thread_id)
-            if link:
-                where = f'<a href="{link}">{where}</a>'
+        where = await topic_label(ctx.bindings, b.chat_id, b.thread_id)
         lines.append(f"• <b>{b.feature}</b> → {where}")
     await update.effective_message.reply_text(
         "\n".join(lines),
@@ -154,6 +204,10 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("unbind", unbind_command))
     app.add_handler(CommandHandler("bindings", bindings_command))
     app.add_handler(CallbackQueryHandler(on_callback, pattern=rf"^{CALLBACK_PREFIX}:"))
+    app.add_handler(
+        MessageHandler(filters.ChatType.SUPERGROUP & filters.UpdateType.MESSAGE, on_message),
+        group=TOPIC_NAME_GROUP,
+    )
 
 
 FEATURE = Feature(

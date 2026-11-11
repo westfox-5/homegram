@@ -17,7 +17,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from homegram import prompts, strings
 from homegram.context import get_ctx
 from homegram.features.base import Feature
-from homegram.features.topics import topic_link
+from homegram.features.topics import topic_label
 from homegram.features.tracker import watch
 from homegram.features.tracker.service import (
     Product,
@@ -505,16 +505,10 @@ def render_notifications(
 
 async def _destinations(context: ContextTypes.DEFAULT_TYPE) -> list[str]:
     """Where the notifications go, as HTML (links to the topics when possible)."""
+    bindings = get_ctx(context).bindings
     out = []
-    for binding in await get_ctx(context).bindings.for_feature(watch.FEATURE_NAME):
-        if binding.thread_id == 0:
-            label = strings.BINDINGS_GENERAL
-        else:
-            label = strings.BINDINGS_TOPIC.format(thread_id=binding.thread_id)
-            link = topic_link(binding.chat_id, binding.thread_id)
-            if link:
-                label = f'<a href="{link}">{label}</a>'
-        out.append(label)
+    for binding in await bindings.for_feature(watch.FEATURE_NAME):
+        out.append(await topic_label(bindings, binding.chat_id, binding.thread_id))
     return out
 
 
