@@ -16,6 +16,8 @@ log = logging.getLogger(__name__)
 PUBLIC_COMMANDS = frozenset({"id"})
 
 SETTINGS_KEY = "settings"
+# Handler group of the guard: before everything else (follow-up questions run in -1).
+GROUP = -2
 
 
 def is_allowed(settings: Settings, user_id: int | None, chat_id: int | None) -> bool:

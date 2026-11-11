@@ -113,7 +113,7 @@ def build_application(settings: Settings) -> Application:
         .build()
     )
     app.bot_data[auth.SETTINGS_KEY] = settings
-    app.add_handler(TypeHandler(Update, auth.guard), group=-1)
+    app.add_handler(TypeHandler(Update, auth.guard), group=auth.GROUP)
     for feature in enabled_features(settings.homeassistant_enabled):
         feature.register(app)
     app.add_error_handler(_on_error)

@@ -1,4 +1,4 @@
-"""Basic commands: /start, /help, /ping, /id."""
+"""Basic commands: /start, /help, /ping, /id, /annulla (follow-up questions, see prompts)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from homegram import strings
+from homegram import prompts, strings
 from homegram.context import get_ctx, thread_id_of
 from homegram.features.base import Feature
 from homegram.integrations.homeassistant import HomeAssistantError
@@ -71,6 +71,7 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler(["start", "help"], help_command))
     app.add_handler(CommandHandler("ping", ping_command))
     app.add_handler(CommandHandler("id", id_command))
+    prompts.register(app)
 
 
 FEATURE = Feature(
@@ -81,5 +82,6 @@ FEATURE = Feature(
         ("help", "mostra questo messaggio"),
         ("ping", "controlla che il bot funzioni"),
         ("id", "mostra gli id di chat, topic e utente"),
+        (prompts.CANCEL_COMMAND, "annulla la domanda in corso"),
     ],
 )

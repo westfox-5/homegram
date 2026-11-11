@@ -25,15 +25,13 @@ ID_INFO = (
 
 NOT_ALLOWED = "⛔️ Non sei autorizzato a usare questo bot."
 
-BIND_USAGE = (
-    "Uso: <code>/bind &lt;funzione&gt;</code> dentro il topic da collegare.\n"
-    "Funzioni disponibili: {features}"
-)
 BIND_UNKNOWN = "Funzione sconosciuta: <b>{feature}</b>.\nFunzioni disponibili: {features}"
+BIND_ASK = "🔗 Quale funzione collego a questo topic?"
+UNBIND_ASK = "🔌 Quale funzione scollego da questo topic?"
+UNBIND_NONE = "ℹ️ Questo topic non è collegato a nessuna funzione."
 BIND_ONLY_GROUPS = "Questo comando funziona solo nei gruppi."
 BIND_OK = "✅ Questo topic ora è collegato a <b>{feature}</b>."
 BIND_ALREADY = "ℹ️ Questo topic è già collegato a <b>{feature}</b>."
-UNBIND_USAGE = "Uso: <code>/unbind &lt;funzione&gt;</code> dentro il topic collegato."
 UNBIND_OK = "🔌 Topic scollegato da <b>{feature}</b>."
 UNBIND_MISSING = "ℹ️ Questo topic non è collegato a <b>{feature}</b>."
 BINDINGS_EMPTY = "Nessun topic collegato in questa chat. Usa <code>/bind &lt;funzione&gt;</code>."
@@ -52,19 +50,18 @@ SHOP_NOT_FOUND = "Elemento non trovato (forse è già stato spuntato)."
 SHOP_CLEARED = "🧹 Rimossi {count} completati"
 SHOP_CLEARED_UNKNOWN = "🧹 Completati rimossi"
 SHOP_TOPIC_HINT = "Scrivi qui qualsiasi cosa e la aggiungo alla lista. /spesa per vederla."
-SHOP_ADD_USAGE = (
-    "Uso: <code>/spesa_aggiungi latte, uova</code> (virgole, punti e virgola o a capo "
-    "separano le voci)."
-)
+SHOP_ASK_ADD = "🛒 Cosa aggiungo alla lista? Separa le voci con virgole o a capo."
 
 HA_UNAVAILABLE = "⚠️ Home Assistant non è raggiungibile, riprova tra poco."
 GENERIC_ERROR = "⚠️ Qualcosa è andato storto. Riprova."
 
+PROMPT_BTN_CANCEL = "✖️ Annulla"
+PROMPT_CANCELLED = "↩️ Annullato."
+PROMPT_NOTHING = "Nessuna domanda in corso."
+PROMPT_EXPIRED = "⌛ Domanda scaduta: rilancia il comando."
+
 TRACKER_TITLE = "📈 <b>Tracker prezzi</b> ({count})"
-TRACKER_EMPTY = (
-    "📈 Nessun prodotto tracciato.\n"
-    "Aggiungine uno con <code>/tracker_aggiungi &lt;nome prodotto&gt; &lt;link&gt;</code>."
-)
+TRACKER_EMPTY = "📈 Nessun prodotto tracciato.\nAggiungine uno con /tracker_aggiungi."
 TRACKER_FOOTER = (
     "<i>In grassetto il prezzo migliore tra i negozi con disponibilità. "
     "Home Assistant aggiorna ogni ~10 min.</i>"
@@ -80,6 +77,22 @@ TRACKER_USAGE = (
     "Con il nome di un prodotto già tracciato aggiungi un altro negozio.\n"
     "Negozi supportati: {shops}"
 )
+TRACKER_ASK_START = (
+    "📈 Scegli un prodotto tracciato per aggiungere un negozio, oppure mandami il link "
+    "di un nuovo prodotto.\nNegozi supportati: {shops}"
+)
+TRACKER_ASK_START_EMPTY = (
+    "📈 Mandami il link del prodotto da tracciare.\nNegozi supportati: {shops}"
+)
+TRACKER_ASK_LINK_NEW = "🔗 Mandami il link di <b>{product}</b>.\nNegozi supportati: {shops}"
+TRACKER_ASK_LINK_EXISTING = (
+    "🔗 Mandami il link di un altro negozio per <b>{product}</b>.\nNegozi supportati: {shops}"
+)
+TRACKER_ASK_LINK_AGAIN = "⚠️ Non vedo un link: mandami il link del prodotto (https://…)."
+TRACKER_ASK_NAME = "🏷 Link {shop} ok. Come chiamo questo prodotto?"
+TRACKER_ASK_NAME_EXISTING = "\nOppure aggiungilo a un prodotto già tracciato:"
+TRACKER_ASK_REMOVE = "🗑 Quale prodotto smetto di tracciare?"
+TRACKER_RETRY = "\n<i>Riprova o premi Annulla.</i>"
 TRACKER_REMOVE_USAGE = (
     "Uso: <code>/tracker_rimuovi &lt;nome prodotto&gt;</code>\n"
     "Per eliminare un solo negozio usa i pulsanti 🗑 di /tracker."

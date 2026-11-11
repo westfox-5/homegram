@@ -160,6 +160,24 @@ class TrackerService:
         key = name.casefold()
         return next((p for p in await self.products() if p.name.casefold() == key), None)
 
+    async def product_of(self, entry_id: str) -> Product | None:
+        """The product a link (config entry) belongs to."""
+        for product in await self.products():
+            if any(link.entry_id == entry_id for link in product.links):
+                return product
+        return None
+
+    async def check_url(self, url: str) -> tuple[Shop, str]:
+        """Expand and resolve `url` before asking anything else about it.
+
+        Raises `UnsupportedUrl` (or `ShortLinkError`) and `TrackerError("duplicate_url")`.
+        """
+        shop, canonical = resolve(await expand(url))
+        for product in await self.products():
+            if any(link.url == canonical for link in product.links):
+                raise TrackerError("duplicate_url", product=product.name)
+        return shop, canonical
+
     async def add(self, product_name: str, url: str) -> tuple[Product, TrackedLink, bool]:
         """Track `url` under `product_name` (created if new).
 

@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import html
 import logging
+from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Update
 from telegram.constants import ChatAction, ParseMode
 from telegram.error import BadRequest
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-from homegram import strings
+from homegram import prompts, strings
 from homegram.context import get_ctx
 from homegram.features.base import Feature
 from homegram.features.tracker.notifications import device_label
@@ -23,8 +24,9 @@ from homegram.features.tracker.service import (
     TrackedLink,
     TrackerError,
     TrackerService,
+    clean_product_name,
 )
-from homegram.features.tracker.shops import SHOPS, ShortLinkError, UnsupportedUrl
+from homegram.features.tracker.shops import SHOPS, Shop, ShortLinkError, UnsupportedUrl
 from homegram.integrations.homeassistant import HomeAssistantError
 
 log = logging.getLogger(__name__)
@@ -105,12 +107,18 @@ def supported_shops() -> str:
     return ", ".join(shop.name for shop in SHOPS)
 
 
-def split_args(text: str | None) -> tuple[str, str | None]:
-    """Split command arguments into (product name, URL). The URL may be anywhere."""
-    words = (text or "").split()[1:]
+def split_text(text: str | None) -> tuple[str, str | None]:
+    """Split free text into (product name, URL). The URL may be anywhere."""
+    words = (text or "").split()
     url = next((w for w in words if w.lower().startswith(("http://", "https://"))), None)
     name = " ".join(w for w in words if w is not url)
     return name, url
+
+
+def split_args(text: str | None) -> tuple[str, str | None]:
+    """Split command arguments into (product name, URL). The URL may be anywhere."""
+    parts = (text or "").split(maxsplit=1)
+    return split_text(parts[1] if len(parts) > 1 else "")
 
 
 def error_text(exc: TrackerError) -> str:
@@ -128,6 +136,17 @@ def error_text(exc: TrackerError) -> str:
     return template.format(shops=supported_shops(), **details)
 
 
+def link_error_text(exc: Exception) -> str:
+    """User-facing text for a link that cannot be tracked."""
+    if isinstance(exc, ShortLinkError):
+        return strings.TRACKER_ERR_SHORT_LINK
+    if isinstance(exc, UnsupportedUrl):
+        return strings.TRACKER_ERR_SHOP.format(shops=supported_shops())
+    if isinstance(exc, TrackerError):
+        return error_text(exc)
+    raise exc
+
+
 async def _reply(update: Update, text: str, markup: InlineKeyboardMarkup | None = None) -> None:
     await update.effective_message.reply_text(
         text, parse_mode=ParseMode.HTML, reply_markup=markup, link_preview_options=NO_PREVIEW
@@ -141,6 +160,22 @@ async def _guard_ha(update: Update, exc: HomeAssistantError) -> None:
     raise exc
 
 
+def _product_rows(
+    products: list[Product], action: str, icon: str
+) -> list[list[InlineKeyboardButton]]:
+    """One button per product; the callback carries the entry id of its first link."""
+    return [
+        [
+            InlineKeyboardButton(
+                f"{icon} {_truncate(p.name, BUTTON_LABEL_LENGTH)}",
+                callback_data=f"{CALLBACK_PREFIX}:{action}:{p.links[0].entry_id}",
+            )
+        ]
+        for p in products
+        if p.links
+    ]
+
+
 async def tracker_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         text, markup = render_products(await _service(context).products())
@@ -150,23 +185,94 @@ async def tracker_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await _reply(update, text, markup)
 
 
+# --- /tracker_aggiungi: arguments, or follow-up questions for the missing ones ---------
+
+ASK_START = "tracker.add.start"  # an existing product (button) or a link / name (text)
+ASK_LINK = "tracker.add.link"  # data: name
+ASK_NAME = "tracker.add.name"  # data: url (already checked)
+ASK_REMOVE = "tracker.remove"
+
+
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     name, url = split_args(update.effective_message.text)
-    if not name or not url:
-        await _reply(update, strings.TRACKER_USAGE.format(shops=supported_shops()))
-        return
+    try:
+        await _continue_add(update, context, name, url)
+    except HomeAssistantError as exc:
+        await _guard_ha(update, exc)
 
+
+async def _continue_add(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, name: str, url: str | None
+) -> None:
+    """Add right away when both are known, otherwise ask for what is missing."""
+    if name and url:
+        await _do_add(update, context, name, url)
+    elif url:
+        await _ask_name(update, context, url, retry_key=ASK_START)
+    elif name:
+        await _ask_link(update, context, name)
+    else:
+        await _ask_start(update, context)
+
+
+async def _ask_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    products = await _service(context).products()
+    text = strings.TRACKER_ASK_START if products else strings.TRACKER_ASK_START_EMPTY
+    await prompts.ask(
+        update,
+        context,
+        ASK_START,
+        text.format(shops=supported_shops()),
+        _product_rows(products, "pick", "➕"),
+    )
+
+
+async def _ask_link(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, name: str, *, edit: bool = False
+) -> None:
+    existing = await _service(context).find_product(name)
+    template = strings.TRACKER_ASK_LINK_EXISTING if existing else strings.TRACKER_ASK_LINK_NEW
+    name = existing.name if existing else name
+    text = template.format(product=html.escape(name), shops=supported_shops())
+    await prompts.ask(update, context, ASK_LINK, text, edit=edit, name=name)
+
+
+async def _checked_url(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, url: str, retry_key: str, **retry: Any
+) -> tuple[Shop, str] | None:
+    """Check a link; if it cannot be tracked, ask `retry_key` again with the error on top."""
+    await update.effective_chat.send_action(ChatAction.TYPING)
+    try:
+        return await _service(context).check_url(url)
+    except (UnsupportedUrl, TrackerError) as exc:
+        text = link_error_text(exc) + strings.TRACKER_RETRY
+        await prompts.ask(update, context, retry_key, text, **retry)
+        return None
+
+
+async def _ask_name(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, url: str, *, retry_key: str
+) -> None:
+    """Check the link first, so a bad one is reported before asking for a name."""
+    checked = await _checked_url(update, context, url, retry_key)
+    if checked is None:
+        return
+    shop, canonical = checked
+    products = await _service(context).products()
+    text = strings.TRACKER_ASK_NAME.format(shop=html.escape(shop.name))
+    if products:
+        text += strings.TRACKER_ASK_NAME_EXISTING
+    await prompts.ask(
+        update, context, ASK_NAME, text, _product_rows(products, "to", "➕"), url=canonical
+    )
+
+
+async def _do_add(update: Update, context: ContextTypes.DEFAULT_TYPE, name: str, url: str) -> None:
     await update.effective_chat.send_action(ChatAction.TYPING)
     try:
         product, link, created = await _service(context).add(name, url)
-    except ShortLinkError:
-        await _reply(update, strings.TRACKER_ERR_SHORT_LINK)
-        return
-    except UnsupportedUrl:
-        await _reply(update, strings.TRACKER_ERR_SHOP.format(shops=supported_shops()))
-        return
-    except TrackerError as exc:
-        await _reply(update, error_text(exc))
+    except (UnsupportedUrl, TrackerError) as exc:
+        await _reply(update, link_error_text(exc))
         return
     except HomeAssistantError as exc:
         await _guard_ha(update, exc)
@@ -180,19 +286,40 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await _reply(update, "\n".join(lines))
 
 
-async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    name, _ = split_args(update.effective_message.text)
-    if not name:
-        await _reply(update, strings.TRACKER_REMOVE_USAGE)
+async def answer_start(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, data: dict[str, Any]
+) -> None:
+    name, url = split_text(text)
+    await _continue_add(update, context, name, url)
+
+
+async def answer_link(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, data: dict[str, Any]
+) -> None:
+    _, url = split_text(text)
+    if not url:
+        await prompts.ask(update, context, ASK_LINK, strings.TRACKER_ASK_LINK_AGAIN, **data)
         return
+    checked = await _checked_url(update, context, url, ASK_LINK, **data)
+    if checked is not None:
+        await _do_add(update, context, data["name"], checked[1])
+
+
+async def answer_name(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, data: dict[str, Any]
+) -> None:
     try:
-        product = await _service(context).find_product(name)
-    except HomeAssistantError as exc:
-        await _guard_ha(update, exc)
+        name = clean_product_name(text)
+    except TrackerError as exc:
+        await prompts.ask(update, context, ASK_NAME, error_text(exc), **data)
         return
-    if product is None:
-        await _reply(update, strings.TRACKER_NOT_FOUND.format(product=html.escape(name)))
-        return
+    await _do_add(update, context, name, data["url"])
+
+
+# --- /tracker_rimuovi ----------------------------------------------------------------
+
+
+def _confirm_product(product: Product) -> tuple[str, InlineKeyboardMarkup]:
     entry_id = product.links[0].entry_id
     markup = InlineKeyboardMarkup(
         [
@@ -206,13 +333,42 @@ async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             ]
         ]
     )
-    await _reply(
-        update,
-        strings.TRACKER_CONFIRM_PRODUCT.format(
-            product=html.escape(product.name), count=len(product.links)
-        ),
-        markup,
+    text = strings.TRACKER_CONFIRM_PRODUCT.format(
+        product=html.escape(product.name), count=len(product.links)
     )
+    return text, markup
+
+
+async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    name, _ = split_args(update.effective_message.text)
+    try:
+        if name:
+            await _confirm_remove(update, context, name)
+            return
+        products = await _service(context).products()
+    except HomeAssistantError as exc:
+        await _guard_ha(update, exc)
+        return
+    if not products:
+        await _reply(update, strings.TRACKER_EMPTY)
+        return
+    await prompts.ask(
+        update, context, ASK_REMOVE, strings.TRACKER_ASK_REMOVE, _product_rows(products, "rmq", "🗑")
+    )
+
+
+async def _confirm_remove(update: Update, context: ContextTypes.DEFAULT_TYPE, name: str) -> None:
+    product = await _service(context).find_product(name)
+    if product is None:
+        await _reply(update, strings.TRACKER_NOT_FOUND.format(product=html.escape(name)))
+        return
+    await _reply(update, *_confirm_product(product))
+
+
+async def answer_remove(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, data: dict[str, Any]
+) -> None:
+    await _confirm_remove(update, context, text)
 
 
 def _confirm_link_markup(entry_id: str) -> InlineKeyboardMarkup:
@@ -230,6 +386,33 @@ def _confirm_link_markup(entry_id: str) -> InlineKeyboardMarkup:
     )
 
 
+async def _on_question_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, action: str, entry_id: str
+) -> None:
+    """Buttons of the follow-up questions: pick / to (adding), rmq (removing)."""
+    query = update.callback_query
+    service = _service(context)
+    if action == "to":
+        pending = prompts.pop_pending(update, context)
+        if pending is None or pending.key != ASK_NAME:
+            await query.answer(strings.PROMPT_EXPIRED, show_alert=True)
+            return
+    product = await service.product_of(entry_id)
+    if product is None:
+        await query.answer(strings.TRACKER_GONE, show_alert=True)
+        return
+    await query.answer()
+    if action == "pick":
+        await _ask_link(update, context, product.name, edit=True)
+    elif action == "to":
+        await query.edit_message_reply_markup(None)
+        await _do_add(update, context, product.name, pending.data["url"])
+    elif action == "rmq":
+        prompts.pop_pending(update, context)
+        text, markup = _confirm_product(product)
+        await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+
+
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.message is None or not query.data:
@@ -240,6 +423,9 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     entry_id = rest[0] if rest else ""
 
     try:
+        if action in ("pick", "to", "rmq"):
+            await _on_question_callback(update, context, action, entry_id)
+            return
         if action == "rm":
             # First tap: ask for confirmation on the same message.
             await query.answer(strings.TRACKER_CONFIRM_LINK)
@@ -386,6 +572,13 @@ async def on_notify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             raise
 
 
+def register_answers() -> None:
+    prompts.on_answer(ASK_START, answer_start)
+    prompts.on_answer(ASK_LINK, answer_link)
+    prompts.on_answer(ASK_NAME, answer_name)
+    prompts.on_answer(ASK_REMOVE, answer_remove)
+
+
 def register(app: Application) -> None:
     app.add_handler(CommandHandler("tracker", tracker_command))
     app.add_handler(CommandHandler("tracker_aggiungi", add_command))
@@ -393,6 +586,7 @@ def register(app: Application) -> None:
     app.add_handler(CommandHandler("tracker_notifiche", notifications_command))
     app.add_handler(CallbackQueryHandler(on_callback, pattern=rf"^{CALLBACK_PREFIX}:"))
     app.add_handler(CallbackQueryHandler(on_notify_callback, pattern=rf"^{NOTIFY_PREFIX}:"))
+    register_answers()
 
 
 FEATURE = Feature(
@@ -401,8 +595,8 @@ FEATURE = Feature(
     register=register,
     commands=[
         ("tracker", "prezzi e disponibilità dei prodotti tracciati"),
-        ("tracker_aggiungi", "traccia un prodotto, es. /tracker_aggiungi U7 Pro Wall <link>"),
-        ("tracker_rimuovi", "smetti di tracciare un prodotto, es. /tracker_rimuovi U7 Pro Wall"),
+        ("tracker_aggiungi", "traccia un prodotto: ti chiedo link e nome"),
+        ("tracker_rimuovi", "smetti di tracciare un prodotto"),
         ("tracker_notifiche", "notifiche: dispositivi, prodotti, on/off"),
     ],
     requires_homeassistant=True,

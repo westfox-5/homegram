@@ -22,22 +22,25 @@ The bot's messages are in Italian (all texts live in [`src/homegram/strings.py`]
 | `/help` | List commands and the features active in the current topic |
 | `/ping` | Check that the bot, the database and Home Assistant (if configured) are working |
 | `/id` | Show chat, topic and user ids (available to everyone, useful for setup) |
-| `/bind <feature>` | Attach a feature to the current topic (e.g. `/bind spesa`) |
-| `/unbind <feature>` | Detach a feature from the current topic |
+| `/annulla` | Cancel the pending follow-up question |
+| `/bind [feature]` | Attach a feature to the current topic (e.g. `/bind spesa`; without it, pick from buttons) |
+| `/unbind [feature]` | Detach a feature from the current topic |
 | `/bindings` | List the topic bindings of this chat |
 | `/spesa` | Show the shopping list with ✅ buttons |
-| `/spesa_aggiungi latte, uova` | Add one or more items (commas, semicolons or new lines separate them) |
+| `/spesa_aggiungi [latte, uova]` | Add one or more items (commas, semicolons or new lines separate them) |
 | `/tracker` | Prices and stock of the tracked products, with 🗑 buttons to remove a shop *(Home Assistant only)* |
-| `/tracker_aggiungi <product> <link>` | Track a product page. With the name of a product already tracked, adds another shop *(Home Assistant only)* |
-| `/tracker_rimuovi <product>` | Stop tracking a product and delete all its scrapers *(Home Assistant only)* |
+| `/tracker_aggiungi [product] [link]` | Track a product page. With the name of a product already tracked, adds another shop *(Home Assistant only)* |
+| `/tracker_rimuovi [product]` | Stop tracking a product and delete all its scrapers *(Home Assistant only)* |
 | `/tracker_notifiche` | Choose which devices get notified and for which products, or turn notifications off *(Home Assistant only)* |
+
+Arguments in brackets can be left out: the bot then asks for them. For example `/tracker_aggiungi` alone shows the tracked products as buttons (to add another shop to one of them) and waits for the link of a new product, then for its name. The next text message you send in the same chat or topic is the answer; any other command, the ✖️ button or `/annulla` cancel the question, and it expires after 10 minutes.
 
 ## Quick start
 
 ### 1. Create the bot
 
 1. Talk to [@BotFather](https://t.me/BotFather), run `/newbot` and copy the token.
-2. Run `/setprivacy` → choose your bot → **Disable**. This lets the bot read normal messages in a bound topic (otherwise it only sees commands).
+2. Run `/setprivacy` → choose your bot → **Disable**. This lets the bot read normal messages in a bound topic and the answers to its questions (otherwise it only sees commands).
 3. Add the bot to your group.
 
 ### 2. Configure

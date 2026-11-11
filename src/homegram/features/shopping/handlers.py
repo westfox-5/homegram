@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -18,7 +19,7 @@ from telegram.ext import (
     filters,
 )
 
-from homegram import strings
+from homegram import prompts, strings
 from homegram.context import get_ctx, thread_id_of
 from homegram.features.base import Feature
 from homegram.features.shopping.backends import ShoppingItem
@@ -29,6 +30,7 @@ FEATURE_NAME = "spesa"
 CALLBACK_PREFIX = "shop"
 # chat_settings key holding the id of the latest list message, kept up to date in place.
 LIVE_MESSAGE_KEY = "shopping.live_message"
+ASK_ADD = "shopping.add"
 # Handler group for free-text messages, so other features can also react to the same text.
 TEXT_HANDLER_GROUP = 10
 
@@ -160,7 +162,17 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if items:
         await add_items(update, context, items, quiet=False)
     else:
-        await update.effective_message.reply_text(strings.SHOP_ADD_USAGE, parse_mode=ParseMode.HTML)
+        await prompts.ask(update, context, ASK_ADD, strings.SHOP_ASK_ADD)
+
+
+async def answer_add(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, data: dict[str, Any]
+) -> None:
+    items = parse_items(text)
+    if not items:
+        await prompts.ask(update, context, ASK_ADD, strings.SHOP_ASK_ADD)
+        return
+    await add_items(update, context, items, quiet=False)
 
 
 async def on_topic_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -222,6 +234,7 @@ def register(app: Application) -> None:
         ),
         group=TEXT_HANDLER_GROUP,
     )
+    prompts.on_answer(ASK_ADD, answer_add)
 
 
 FEATURE = Feature(
@@ -230,7 +243,7 @@ FEATURE = Feature(
     register=register,
     commands=[
         ("spesa", "mostra la lista della spesa"),
-        ("spesa_aggiungi", "aggiungi alla lista, es. /spesa_aggiungi latte, uova"),
+        ("spesa_aggiungi", "aggiungi alla lista (es. /spesa_aggiungi latte, uova)"),
     ],
     bindable=True,
     topic_hint=strings.SHOP_TOPIC_HINT,
