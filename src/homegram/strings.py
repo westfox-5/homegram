@@ -102,6 +102,9 @@ TRACKER_GONE = "Questo scraper non esiste più."
 TRACKER_ERR_SHOP = (
     "⚠️ Link non supportato: serve la pagina di un prodotto.\nNegozi supportati: {shops}"
 )
+TRACKER_ERR_SHORT_LINK = (
+    "⚠️ Non riesco ad aprire il link breve. Riprova o manda il link completo del prodotto."
+)
 TRACKER_ERR_LONG_NAME = "⚠️ Nome troppo lungo (max {max} caratteri)."
 TRACKER_ERR_DUPLICATE_URL = "ℹ️ Questo link è già tracciato in <b>{product}</b>."
 TRACKER_ERR_DUPLICATE_SHOP = (

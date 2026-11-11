@@ -24,7 +24,7 @@ from homegram.features.tracker.service import (
     TrackerError,
     TrackerService,
 )
-from homegram.features.tracker.shops import SHOPS, UnsupportedUrl
+from homegram.features.tracker.shops import SHOPS, ShortLinkError, UnsupportedUrl
 from homegram.integrations.homeassistant import HomeAssistantError
 
 log = logging.getLogger(__name__)
@@ -159,6 +159,9 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.effective_chat.send_action(ChatAction.TYPING)
     try:
         product, link, created = await _service(context).add(name, url)
+    except ShortLinkError:
+        await _reply(update, strings.TRACKER_ERR_SHORT_LINK)
+        return
     except UnsupportedUrl:
         await _reply(update, strings.TRACKER_ERR_SHOP.format(shops=supported_shops()))
         return

@@ -10,7 +10,9 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import SplitResult, urlsplit, urlunsplit
+from urllib.parse import SplitResult, urljoin, urlsplit, urlunsplit
+
+import httpx
 
 KIND_PRICE = "prezzo"
 KIND_STOCK = "disponibilità"
@@ -151,6 +153,43 @@ SHOPS: tuple[Shop, ...] = (
 
 class UnsupportedUrl(ValueError):
     pass
+
+
+class ShortLinkError(UnsupportedUrl):
+    """A short link that could not be expanded (network error, no redirect, too many hops)."""
+
+
+# Share links of the Amazon app ("https://amzn.eu/d/…"): a redirect to the product page.
+SHORT_LINK_HOSTS = frozenset({"amzn.eu", "amzn.to", "a.co"})
+_MAX_HOPS = 5
+_TIMEOUT = 10  # seconds
+
+
+async def expand(url: str) -> str:
+    """Follow the redirects of a short link and return the product URL it points to.
+
+    Other URLs are returned unchanged. Only the redirect headers are read: the target page
+    is never downloaded.
+    """
+    url = url.strip()
+    if (urlsplit(url).hostname or "").lower() not in SHORT_LINK_HOSTS:
+        return url
+    current = url
+    try:
+        async with httpx.AsyncClient(
+            timeout=_TIMEOUT, headers={"User-Agent": BROWSER_UA}
+        ) as client:
+            for _ in range(_MAX_HOPS):
+                async with client.stream("GET", current) as response:
+                    location = response.headers.get("location")
+                    if not response.is_redirect or not location:
+                        raise ShortLinkError(url)
+                current = urljoin(current, location)
+                if (urlsplit(current).hostname or "").lower() not in SHORT_LINK_HOSTS:
+                    return current
+    except httpx.HTTPError as exc:
+        raise ShortLinkError(url) from exc
+    raise ShortLinkError(url)
 
 
 def resolve(url: str) -> tuple[Shop, str]:

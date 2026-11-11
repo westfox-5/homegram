@@ -125,7 +125,7 @@ The list is then shared with the Home Assistant app and every chat. `/ping` repo
 /tracker_rimuovi U7 Pro Wall
 ```
 
-Supported shops: **wisp.store** and **Amazon** (`.it`, `.de`, `.fr`, `.es`). Shop profiles (URL normalization and CSS selectors) live in [`src/homegram/features/tracker/shops.py`](src/homegram/features/tracker/shops.py).
+Supported shops: **wisp.store** and **Amazon** (`.it`, `.de`, `.fr`, `.es`). Amazon app share links (`https://amzn.eu/d/…`, `amzn.to`, `a.co`) work too: the bot follows the redirect to the product page. Shop profiles (URL normalization and CSS selectors) live in [`src/homegram/features/tracker/shops.py`](src/homegram/features/tracker/shops.py).
 
 How it works:
 

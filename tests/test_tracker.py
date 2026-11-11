@@ -20,7 +20,14 @@ from homegram.features.tracker.service import (
     clean_product_name,
     group_products,
 )
-from homegram.features.tracker.shops import WISP, UnsupportedUrl, in_stock, resolve
+from homegram.features.tracker.shops import (
+    WISP,
+    ShortLinkError,
+    UnsupportedUrl,
+    expand,
+    in_stock,
+    resolve,
+)
 from homegram.integrations.homeassistant import HomeAssistantClient, HomeAssistantError
 
 BASE = "http://ha.test:8123"
@@ -449,3 +456,42 @@ def test_price_notification_threshold_and_dots() -> None:
     assert "delta" in config["triggers"][0]["variables"]
     title = config["actions"][0]["data"]["title"]
     assert "🔴" in title and "🟢" in title and "💶" not in title
+
+
+# --- short links ---------------------------------------------------------------------
+
+
+@respx.mock
+async def test_expand_short_link() -> None:
+    target = "https://www.amazon.it/dp/B0F7HGLFHS?ref=cm_sw_r_cso_cp_apan_dp_X&social_share=X"
+    respx.get("https://amzn.eu/d/00tUfN4F").respond(301, headers={"Location": target})
+    url = await expand("https://amzn.eu/d/00tUfN4F")
+    assert url == target
+    assert resolve(url)[1] == "https://www.amazon.it/dp/B0F7HGLFHS"
+
+
+@respx.mock
+async def test_expand_follows_short_hops() -> None:
+    respx.get("https://a.co/d/x").respond(302, headers={"Location": "https://amzn.to/y"})
+    respx.get("https://amzn.to/y").respond(
+        301, headers={"Location": "https://www.amazon.de/dp/B0DV6CDXKT"}
+    )
+    assert await expand("https://a.co/d/x") == "https://www.amazon.de/dp/B0DV6CDXKT"
+
+
+async def test_expand_leaves_other_urls() -> None:
+    assert await expand(" https://www.amazon.it/dp/B0DV6CDXKT ") == (
+        "https://www.amazon.it/dp/B0DV6CDXKT"
+    )
+
+
+@respx.mock
+@pytest.mark.parametrize("response", [httpx.Response(404), httpx.ConnectError("down")])
+async def test_expand_failures(response: Any) -> None:
+    route = respx.get("https://amzn.eu/d/broken")
+    if isinstance(response, Exception):
+        route.side_effect = response
+    else:
+        route.respond(404)
+    with pytest.raises(ShortLinkError):
+        await expand("https://amzn.eu/d/broken")

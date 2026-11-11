@@ -15,7 +15,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from homegram.features.tracker import notifications
-from homegram.features.tracker.shops import KIND_PRICE, KIND_STOCK, Shop, in_stock, resolve
+from homegram.features.tracker.shops import (
+    KIND_PRICE,
+    KIND_STOCK,
+    Shop,
+    expand,
+    in_stock,
+    resolve,
+)
 from homegram.integrations.homeassistant import HomeAssistantClient, HomeAssistantError
 
 log = logging.getLogger(__name__)
@@ -159,7 +166,7 @@ class TrackerService:
         Returns the updated product, the new link and whether the product is new.
         """
         name = clean_product_name(product_name)
-        shop, canonical = resolve(url)
+        shop, canonical = resolve(await expand(url))
 
         products = await self.products()
         for product in products:
