@@ -2,7 +2,7 @@
 
 A small, modular Telegram bot for your home. Add it to your household group chat (forum **topics** supported) and use it for everyday home stuff.
 
-**Features (v0.1)**
+**Features**
 
 - 🛒 **Shared shopping list**: add items with `/spesa_aggiungi`, see the list with `/spesa`, tick them off with inline buttons, clear completed ones.
 - 📌 **Topic bindings**: attach a feature to a forum topic. In a topic bound to the shopping list, *any* message is added to the list.
