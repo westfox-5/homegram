@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -102,6 +103,19 @@ class HomeAssistantClient:
         """Available services, grouped by domain."""
         return await self._request("GET", "/api/services")
 
+    # --- states -------------------------------------------------------------
+
+    async def states(self) -> dict[str, dict[str, Any]]:
+        """Every entity state, by entity id ({"state": ..., "attributes": {...}, ...})."""
+        data = await self._request("GET", "/api/states")
+        return {item["entity_id"]: item for item in data or []}
+
+    async def now(self) -> datetime:
+        """Current time in Home Assistant's time zone (aware)."""
+        return datetime.fromisoformat(
+            (await self.render_template("{{ now().isoformat() }}")).strip()
+        )
+
     # --- templates ----------------------------------------------------------
 
     async def render_template(self, template: str) -> str:
@@ -148,6 +162,15 @@ class HomeAssistantClient:
             return await self._request("GET", f"/api/config/automation/config/{automation_id}")
         except HomeAssistantError as exc:
             if exc.status == 404:
+                return None
+            raise
+
+    async def script_config(self, script_id: str) -> dict[str, Any] | None:
+        """Config of a UI script (without the `script.` prefix), or None if not editable."""
+        try:
+            return await self._request("GET", f"/api/config/script/config/{script_id}")
+        except HomeAssistantError as exc:
+            if exc.status in (400, 404):
                 return None
             raise
 

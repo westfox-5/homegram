@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from homegram.features.tracker import notifications
+from homegram.features.tracker.alerts import alert_for
 from homegram.features.tracker.handlers import (
     format_price,
     render_notifications,
@@ -14,7 +14,6 @@ from homegram.features.tracker.handlers import (
     split_args,
 )
 from homegram.features.tracker.service import (
-    NotificationStatus,
     TrackerError,
     TrackerService,
     clean_product_name,
@@ -230,7 +229,7 @@ async def test_add_link_to_existing_product(ha: HomeAssistantClient) -> None:
     mock_template(wisp_only, wisp_only + created, wisp_only + created)
     flow, sub = mock_flows()
 
-    service = TrackerService(ha, automation_id=None)
+    service = TrackerService(ha)
     product, link, is_new = await service.add(
         "u7 pro wall", "https://www.amazon.it/x/dp/B0D9JTNXNL?th=1"
     )
@@ -280,32 +279,22 @@ async def test_forbidden_token(ha: HomeAssistantClient) -> None:
 
 
 @respx.mock
-async def test_remove_link_syncs_automation(ha: HomeAssistantClient) -> None:
+async def test_remove_link_notifies_listeners(ha: HomeAssistantClient) -> None:
     mock_template(ROWS, ROWS[:2])
     delete = respx.delete(f"{BASE}/api/config/config_entries/entry/e2").mock(
         return_value=httpx.Response(200, json={})
     )
-    config = {"triggers": [{"trigger": "state", "entity_id": ["old"]}], "actions": []}
-    respx.get(f"{BASE}/api/config/automation/config/auto").mock(
-        return_value=httpx.Response(200, json=config)
-    )
-    save = respx.post(f"{BASE}/api/config/automation/config/auto").mock(
-        return_value=httpx.Response(200, json={"result": "ok"})
-    )
+    service = TrackerService(ha)
+    seen: list[list[str]] = []
 
-    link = await TrackerService(ha, "auto").remove_link("e2")
+    async def listener() -> None:
+        seen.append(await service.entities())
+
+    service.on_change(listener)
+    link = await service.remove_link("e2")
 
     assert link is not None and link.shop == "Amazon" and delete.called
-    saved = json.loads(save.calls.last.request.content)
-    assert saved["triggers"][0]["entity_id"] == ["sensor.u7_wisp_disp", "sensor.u7_wisp_prezzo"]
-
-
-@respx.mock
-async def test_sync_skips_missing_automation(ha: HomeAssistantClient) -> None:
-    respx.get(f"{BASE}/api/config/automation/config/auto").mock(
-        return_value=httpx.Response(404, json={"message": "Resource not found"})
-    )
-    assert await TrackerService(ha, "auto").sync_automation() is False
+    assert seen == [["sensor.u7_wisp_disp", "sensor.u7_wisp_prezzo"]]
 
 
 @respx.mock
@@ -321,141 +310,63 @@ async def test_remove_product(ha: HomeAssistantClient) -> None:
 # --- notifications -------------------------------------------------------------------
 
 
-def test_notification_config_roundtrip() -> None:
-    settings = notifications.NotificationSettings(
-        targets=["mobile_app_s24", "mobile_app_watch"], muted=["U7 Pro Wall"]
+def state(entity: str, name: str, value: str, unit: str = "") -> dict[str, Any]:
+    attributes = {"friendly_name": name}
+    if unit:
+        attributes["unit_of_measurement"] = unit
+    return {"entity_id": entity, "state": value, "attributes": attributes}
+
+
+def change(name: str, old: str, new: str, unit: str = "") -> dict[str, Any]:
+    return {
+        "from_state": state("sensor.x", name, old, unit),
+        "to_state": state("sensor.x", name, new, unit),
+    }
+
+
+PRICE = "U7 Pro · Amazon · prezzo"
+STOCK = "U7 Pro · wisp.store · disponibilità"
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        ("199.99", "199.98", None),
+        ("199.99", "195.00", None),
+        ("199.99", "194.99", "🟢 <b>U7 Pro</b>\nAmazon: 199,99 € → 194,99 € (▼ 5,00 €)"),
+        ("95.10", "100.10", "🔴 <b>U7 Pro</b>\nAmazon: 95,10 € → 100,10 € (▲ 5,00 €)"),
+        ("abc", "190", None),
+        ("unavailable", "150", None),
+    ],
+)
+def test_price_alerts(old: str, new: str, expected: str | None) -> None:
+    alert = alert_for(change(PRICE, old, new), set())
+    assert (alert.text if alert else None) == expected
+
+
+def test_stock_alerts_and_mute() -> None:
+    back = alert_for(change(STOCK, "0", "3", "pz"), set(), "https://wisp.store/x")
+    assert back is not None
+    assert back.text == (
+        '✅ <b>U7 Pro</b>\nDi nuovo disponibile su <a href="https://wisp.store/x">wisp.store</a>'
+        " (3 pz)"
     )
-    config = notifications.build(["sensor.b", "sensor.a"], settings)
-    assert config["triggers"][0]["entity_id"] == ["sensor.a", "sensor.b"]
-    assert [a["action"] for a in config["actions"]] == [
-        "notify.mobile_app_s24",
-        "notify.mobile_app_watch",
-    ]
-    parsed = notifications.parse(config)
-    assert parsed.exists and parsed.targets == settings.targets and parsed.muted == settings.muted
-    assert notifications.parse(None).exists is False
-
-
-def test_device_label() -> None:
-    assert notifications.device_label("mobile_app_s24_ultra_di_davide") == "S24 Ultra Di Davide"
-
-
-def mock_ha_for_notifications(config_responses: list[httpx.Response]) -> dict[str, Any]:
-    """Template endpoint answering both the tracker query and the automation lookup."""
-    state = {"automation": "off"}
-
-    def template(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content)["template"]
-        if "states.automation" in body:
-            return httpx.Response(
-                200,
-                text=json.dumps({"entity_id": "automation.tracker", "state": state["automation"]}),
-            )
-        return httpx.Response(200, text=json.dumps(ROWS))
-
-    def turn(new: str):  # type: ignore[no-untyped-def]
-        def handler(request: httpx.Request) -> httpx.Response:
-            state["automation"] = new
-            return httpx.Response(200, json=[])
-
-        return handler
-
-    respx.post(f"{BASE}/api/template").mock(side_effect=template)
-    respx.get(f"{BASE}/api/services").mock(
-        return_value=httpx.Response(
-            200,
-            json=[
-                {"domain": "light", "services": {"turn_on": {}}},
-                {
-                    "domain": "notify",
-                    "services": {"mobile_app_s24": {}, "notify": {}, "mobile_app_watch": {}},
-                },
-            ],
-        )
+    out = alert_for(
+        change("P · Amazon · disponibilità", "Disponibilità immediata", "Non disponibile"), set()
     )
-    respx.get(f"{BASE}/api/config/automation/config/auto").mock(side_effect=config_responses)
-    respx.post(f"{BASE}/api/services/automation/turn_on").mock(side_effect=turn("on"))
-    respx.post(f"{BASE}/api/services/automation/turn_off").mock(side_effect=turn("off"))
-    return state
-
-
-@respx.mock
-async def test_first_device_creates_and_enables_automation(ha: HomeAssistantClient) -> None:
-    saved: list[dict[str, Any]] = []
-
-    def save(request: httpx.Request) -> httpx.Response:
-        saved.append(json.loads(request.content))
-        return httpx.Response(200, json={"result": "ok"})
-
-    respx.post(f"{BASE}/api/config/automation/config/auto").mock(side_effect=save)
-    config_404 = httpx.Response(404, json={"message": "Resource not found"})
-    state = mock_ha_for_notifications(
-        [config_404, lambda request: httpx.Response(200, json=saved[-1])]  # type: ignore[list-item]
-    )
-
-    status = await TrackerService(ha, "auto").toggle_device("mobile_app_s24")
-
-    assert state["automation"] == "on" and status.enabled
-    assert status.devices == ["mobile_app_s24", "mobile_app_watch"]
-    assert status.settings.targets == ["mobile_app_s24"]
-    assert saved[-1]["actions"][0]["action"] == "notify.mobile_app_s24"
-    assert len(saved[-1]["triggers"][0]["entity_id"]) == 4
-
-
-@respx.mock
-async def test_mute_product_and_disable(ha: HomeAssistantClient) -> None:
-    existing = notifications.build(
-        ["sensor.u7_wisp_prezzo"],
-        notifications.NotificationSettings(targets=["mobile_app_s24"], muted=["Gone"]),
-    )
-    save = respx.post(f"{BASE}/api/config/automation/config/auto").mock(
-        return_value=httpx.Response(200, json={"result": "ok"})
-    )
-    state = mock_ha_for_notifications([httpx.Response(200, json=existing)] * 6)
-    service = TrackerService(ha, "auto")
-
-    await service.toggle_product("U7 Pro Wall")
-    muted = json.loads(save.calls.last.request.content)["triggers"][0]["variables"]["muted"]
-    assert muted == ["U7 Pro Wall"]  # "Gone" is no longer tracked: forgotten
-
-    state["automation"] = "on"
-    await service.set_notifications(False)
-    assert state["automation"] == "off"
-
-
-@respx.mock
-async def test_enable_without_devices_fails(ha: HomeAssistantClient) -> None:
-    mock_ha_for_notifications([httpx.Response(404, json={})])
-    with pytest.raises(TrackerError) as exc:
-        await TrackerService(ha, "auto").set_notifications(True)
-    assert exc.value.code == "no_devices"
+    assert out is not None and out.text.startswith("❌ <b>P</b>")
+    assert alert_for(change(STOCK, "5", "4", "pz"), set()) is None  # pieces sold: no alert
+    assert alert_for(change(STOCK, "0", "3", "pz"), {"U7 Pro"}) is None  # muted
+    assert alert_for(change("Not a tracker sensor", "1", "100"), set()) is None
 
 
 def test_render_notifications() -> None:
-    status = NotificationStatus(
-        settings=notifications.NotificationSettings(
-            targets=["mobile_app_s24"], muted=["U7 Pro Wall"], exists=True
-        ),
-        enabled=True,
-        devices=["mobile_app_s24", "mobile_app_watch"],
-        products=["Switch", "U7 Pro Wall"],
-    )
-    text, markup = render_notifications(status)
-    assert "✅ S24" in text and "▫️ Watch" in text
-    assert "🔕 U7 Pro Wall" in text and "🔔 Switch" in text
-    data = [b.callback_data for r in markup.inline_keyboard for b in r]
-    assert data[0] == "trn:off" and "trn:dev:1" in data and "trn:prod:1" in data
-
-
-def test_price_notification_threshold_and_dots() -> None:
-    config = notifications.build(
-        ["sensor.a"], notifications.NotificationSettings(targets=["mobile_app_s24"])
-    )
-    conditions = " ".join(c["value_template"] for c in config["conditions"])
-    assert f"abs >= {notifications.PRICE_THRESHOLD}" in conditions
-    assert "delta" in config["triggers"][0]["variables"]
-    title = config["actions"][0]["data"]["title"]
-    assert "🔴" in title and "🟢" in title and "💶" not in title
+    text, markup = render_notifications(["A", "B"], {"B"}, [])
+    assert "/bind tracker" in text and "🔔 A" in text and "🔕 B" in text
+    labels = [b.text for row in markup.inline_keyboard for b in row]
+    assert labels[:2] == ["🔔 A", "🔕 B"]
+    text, _ = render_notifications([], set(), ["topic 7"])
+    assert "Arrivano qui: topic 7" in text
 
 
 # --- short links ---------------------------------------------------------------------

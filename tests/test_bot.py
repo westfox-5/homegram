@@ -23,7 +23,8 @@ def test_application_registers_feature_commands(monkeypatch: pytest.MonkeyPatch)
     app = build_application(Settings(_env_file=None))  # type: ignore[call-arg]
 
     registered = registered_commands(app)
-    declared = {cmd for feature in enabled_features(False) for cmd, _ in feature.commands}
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    declared = {cmd for feature in enabled_features(settings) for cmd, _ in feature.commands}
     assert declared <= registered
     assert {"start", "spesa", "spesa_aggiungi", "lista", "bind"} <= registered
     # Without Home Assistant the tracker is not available at all.
@@ -34,11 +35,30 @@ def test_tracker_requires_home_assistant(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:TEST")
     monkeypatch.setenv("HA_URL", "http://ha.test:8123")
     monkeypatch.setenv("HA_TOKEN", "secret")
-    app = build_application(Settings(_env_file=None))  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    app = build_application(settings)
 
-    declared = {cmd for feature in FEATURES for cmd, _ in feature.commands}
+    declared = {cmd for feature in enabled_features(settings) for cmd, _ in feature.commands}
     assert declared <= registered_commands(app)
-    assert registered_commands(app) >= TRACKER_COMMANDS
+    assert registered_commands(app) >= TRACKER_COMMANDS | {"scene", "spazzatura"}
+    # Features that need entities stay off until they are configured.
+    assert "energia" not in registered_commands(app)
+    names = {f.name for f in enabled_features(settings)}
+    assert "pulizie" not in names
+
+
+def test_configured_features(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:TEST")
+    monkeypatch.setenv("HA_URL", "http://ha.test:8123")
+    monkeypatch.setenv("HA_TOKEN", "secret")
+    monkeypatch.setenv("HA_VACUUM", "vacuum.robot")
+    monkeypatch.setenv("ENERGY_SOLAR_POWER", "sensor.solar")
+    monkeypatch.setenv("HA_SCENES", "script.a, scene.b")
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.ha_scenes == ("script.a", "scene.b")
+    assert settings.energy_sensors == {"solar_power": "sensor.solar"}
+    names = {f.name for f in enabled_features(settings)}
+    assert {"pulizie", "energia", "scene", "spazzatura", "tracker"} <= names
 
 
 def test_feature_names_are_unique() -> None:

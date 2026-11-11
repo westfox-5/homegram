@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 
 from telegram import BotCommand, Update
@@ -19,9 +21,12 @@ from homegram.features.shopping.backends import (
     SqliteShoppingBackend,
 )
 from homegram.features.tracker.service import TrackerService
+from homegram.integrations.ha_events import HomeAssistantEvents
 from homegram.integrations.homeassistant import HomeAssistantClient, HomeAssistantError
 
 log = logging.getLogger(__name__)
+
+EVENTS_TASK_KEY = "ha_events_task"
 
 
 async def _post_init(app: Application) -> None:
@@ -31,8 +36,10 @@ async def _post_init(app: Application) -> None:
     await db.connect()
 
     ha: HomeAssistantClient | None = None
+    events: HomeAssistantEvents | None = None
     if settings.homeassistant_enabled:
         ha = HomeAssistantClient(settings.ha_url, settings.ha_token)  # type: ignore[arg-type]
+        events = HomeAssistantEvents(settings.ha_url, settings.ha_token)  # type: ignore[arg-type]
 
     shopping: ShoppingBackend
     if settings.shopping_backend == "homeassistant" and ha is not None:
@@ -40,8 +47,8 @@ async def _post_init(app: Application) -> None:
     else:
         shopping = SqliteShoppingBackend(db)
 
-    features = enabled_features(ha is not None)
-    tracker = TrackerService(ha, settings.ha_tracker_automation or None) if ha else None
+    features = enabled_features(settings)
+    tracker = TrackerService(ha) if ha else None
 
     app.bot_data[CTX_KEY] = AppContext(
         settings=settings,
@@ -52,14 +59,18 @@ async def _post_init(app: Application) -> None:
         features=features,
         ha=ha,
         tracker=tracker,
+        events=events,
     )
 
-    if tracker is not None:
-        # Rewrite the notification automation so template changes in a new release reach HA.
-        try:
-            await tracker.sync_automation()
-        except Exception:
-            log.warning("Could not refresh the tracker automation on startup", exc_info=True)
+    if events is not None:
+        # Features register their Home Assistant triggers, then the connection starts.
+        for feature in features:
+            if feature.start is not None:
+                try:
+                    await feature.start(app)
+                except Exception:
+                    log.exception("Could not start the notifications of %s", feature.name)
+        app.bot_data[EVENTS_TASK_KEY] = asyncio.create_task(events.run())
 
     commands = [BotCommand(cmd, desc) for f in features for cmd, desc in f.commands]
     await app.bot.set_my_commands(commands)
@@ -79,6 +90,13 @@ async def _post_shutdown(app: Application) -> None:
     ctx: AppContext | None = app.bot_data.get(CTX_KEY)
     if ctx is None:
         return
+    task: asyncio.Task[None] | None = app.bot_data.pop(EVENTS_TASK_KEY, None)
+    if task is not None:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    if ctx.events is not None:
+        await ctx.events.close()
     if ctx.ha is not None:
         await ctx.ha.close()
     await ctx.db.close()
@@ -114,7 +132,7 @@ def build_application(settings: Settings) -> Application:
     )
     app.bot_data[auth.SETTINGS_KEY] = settings
     app.add_handler(TypeHandler(Update, auth.guard), group=auth.GROUP)
-    for feature in enabled_features(settings.homeassistant_enabled):
+    for feature in enabled_features(settings):
         feature.register(app)
     app.add_error_handler(_on_error)
     return app

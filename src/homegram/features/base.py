@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from telegram.ext import Application
+
+if TYPE_CHECKING:
+    from homegram.config import Settings
 
 
 @dataclass(frozen=True)
@@ -21,3 +25,7 @@ class Feature:
     topic_hint: str = ""
     # Only enabled when Home Assistant is configured (HA_URL and HA_TOKEN).
     requires_homeassistant: bool = False
+    # Extra condition on the configuration (e.g. the entities it needs are set).
+    available: Callable[[Settings], bool] | None = None
+    # Run once at startup, after the app context exists: subscribe to Home Assistant events.
+    start: Callable[[Application], Awaitable[None]] | None = None

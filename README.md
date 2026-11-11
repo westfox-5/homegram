@@ -8,7 +8,11 @@ A small, modular Telegram bot for your home. Add it to your household group chat
 - 📌 **Topic bindings**: attach a feature to a forum topic. In a topic bound to the shopping list, *any* message is added to the list.
 - 💾 **Persistent state** in a single SQLite file: survives restarts and upgrades.
 - 🏡 **Optional Home Assistant integration**: use a Home Assistant to-do entity as the shopping list.
-- 📈 **Price tracker** *(Home Assistant only)*: track prices and stock of products across shops with `/tracker_aggiungi`; the bot creates the scrapers in Home Assistant for you and can push changes to your phone.
+- 📈 **Price tracker** *(Home Assistant only)*: track prices and stock of products across shops with `/tracker_aggiungi`; the bot creates the scrapers in Home Assistant for you and posts price and stock changes to a topic.
+- 🎬 **Scenes** *(Home Assistant only)*: `/scene` runs your Home Assistant scenes and scripts from buttons.
+- ⚡️ **Energy** *(Home Assistant only)*: `/energia` shows solar, battery, house and grid; a daily report and solar surplus alerts go to a topic.
+- 🤖 **Robot vacuum** *(Home Assistant only)*: notifications when it starts, gets stuck or a part wears out.
+- 🗑 **Waste collection** *(Home Assistant only)*: `/spazzatura` lists the next pickups; a reminder with "Fatto" / "Non serve" buttons the evening before.
 - 🔒 **Whitelist** of users and chats.
 
 Commands are grouped by feature: each feature has a main command (`/spesa`, `/tracker`) and sub-commands prefixed with its name (`/spesa_aggiungi`, `/tracker_aggiungi`, …). The old `/lista` and `/spesa <items>` still work as aliases.
@@ -31,7 +35,10 @@ The bot's messages are in Italian (all texts live in [`src/homegram/strings.py`]
 | `/tracker` | Prices and stock of the tracked products, with 🗑 buttons to remove a shop *(Home Assistant only)* |
 | `/tracker_aggiungi [product] [link]` | Track a product page. With the name of a product already tracked, adds another shop *(Home Assistant only)* |
 | `/tracker_rimuovi [product]` | Stop tracking a product and delete all its scrapers *(Home Assistant only)* |
-| `/tracker_notifiche` | Choose which devices get notified and for which products, or turn notifications off *(Home Assistant only)* |
+| `/tracker_notifiche` | Where the tracker notifications go, and which products to mute *(Home Assistant only)* |
+| `/scene` | Buttons to run Home Assistant scenes and scripts *(Home Assistant only)* |
+| `/energia` | Solar, battery, house and grid now and today, tomorrow's forecast *(Home Assistant, `ENERGY_*` set)* |
+| `/spazzatura` | Next waste pickups *(Home Assistant, waste_collection_schedule)* |
 
 Arguments in brackets can be left out: the bot then asks for them. For example `/tracker_aggiungi` alone shows the tracked products as buttons (to add another shop to one of them) and waits for the link of a new product, then for its name. The next text message you send in the same chat or topic is the answer; any other command, the ✖️ button or `/annulla` cancel the question, and it expires after 10 minutes.
 
@@ -93,7 +100,19 @@ From now on, every message written in that topic is added to the list (the bot r
 | `HA_URL` | — | e.g. `http://homeassistant.local:8123` |
 | `HA_TOKEN` | — | Home Assistant long-lived access token |
 | `HA_SHOPPING_ENTITY` | `todo.shopping_list` | To-do entity used by the `homeassistant` backend |
-| `HA_TRACKER_AUTOMATION` | `tracker_notifica` | Id of the Home Assistant automation the price tracker generates for notifications (see below). Empty to disable notifications |
+| `HA_TRACKER_AUTOMATION` | `tracker_notifica` | Old Home Assistant automation of the tracker notifications: its muted products are imported once. The bot does not change it |
+| `HA_SCENES` | auto | Comma-separated scenes/scripts for `/scene`. Empty: every `scene.*` and every script without input fields |
+| `HA_VACUUM` | — | Robot vacuum entity; enables the `pulizie` notifications |
+| `HA_VACUUM_BATTERY` / `HA_VACUUM_ERROR` | auto | Battery sensor and error sensor (its `description` attribute) of the robot. Empty: found on the robot's device |
+| `HA_VACUUM_PARTS` | auto | Comma-separated lifespan sensors (%). Empty: every `%` sensor of the robot's device |
+| `VACUUM_PARTS_THRESHOLD` | `10` | Notify when a part drops below this % |
+| `HA_WASTE_SENSORS` | auto | Comma-separated waste_collection_schedule sensors. Empty: all of them |
+| `WASTE_REMINDER_TIME` / `WASTE_REPEAT_TIME` | `19:30` / `21:30` | Reminder the evening before a pickup, and its repetition if nobody answered (empty: no repetition) |
+| `ENERGY_SOLAR_POWER`, `ENERGY_LOAD_POWER`, `ENERGY_GRID_POWER`, `ENERGY_BATTERY_POWER`, `ENERGY_BATTERY_SOC` | — | Power sensors (W or kW) and battery %. Grid: > 0 import, < 0 export. Battery: > 0 charging |
+| `ENERGY_SOLAR_TODAY`, `ENERGY_LOAD_TODAY`, `ENERGY_IMPORT_TODAY`, `ENERGY_EXPORT_TODAY` | — | Today's totals (kWh) |
+| `ENERGY_FORECAST_TODAY`, `ENERGY_FORECAST_TOMORROW`, `ENERGY_PEAK_TOMORROW` | — | Solar forecast (e.g. Forecast.Solar): kWh and the time of tomorrow's peak |
+| `ENERGY_SURPLUS_KW` | `1` | Surplus alert when exporting more than this for 10 minutes (once a day) |
+| `ENERGY_REPORT_TIME` | `21:00` | Daily energy report (empty: off) |
 | `HOMEGRAM_VERSION` | `latest` | Image tag used by `docker-compose.yml` |
 
 If both whitelists are empty, the bot ignores everyone except for `/id`.
@@ -135,7 +154,21 @@ How it works:
 - Each link is a Scrape config entry in Home Assistant (its title is the product URL) with two sensors named `<product> · <shop> · prezzo` and `<product> · <shop> · disponibilità`. Home Assistant is the only source of truth: nothing about the tracker is stored in the bot's database.
 - Home Assistant polls each page every ~10 minutes. Some shops (Amazon) may start blocking requests: the price sensor then becomes *unavailable* instead of showing a wrong value.
 - Dashboards and automations can find every tracked product through the same naming convention, e.g. in a template: `integration_entities('scrape')` + `state_attr(e, 'friendly_name').split(' · ')`, and the URL with `config_entry_attr(config_entry_id(e), 'title')`.
-- **Notifications**: `/tracker_notifiche` lets you pick the devices (every phone or watch with the Home Assistant companion app, i.e. the `notify.mobile_app_*` services), mute single products and turn notifications on or off. A notification is sent when a price changes by at least 5 € (🔴 up, 🟢 down) or a product goes in or out of stock (not for every piece sold). The bot generates a Home Assistant automation for this (id `tracker_notifica`, see `HA_TRACKER_AUTOMATION`) and rewrites it whenever products or settings change and when the bot starts, so don't edit it by hand. The settings live in the automation itself: the notify actions are the devices, the `muted` trigger variable lists the muted products, and the automation's on/off state is the main switch.
+- **Notifications** go to the topics bound with `/bind tracker` (`/unbind tracker` to stop): a price change of at least 5 € (🔴 up, 🟢 down), or a product going in or out of stock (not every piece sold). Each one has a button to mute that product; `/tracker_notifiche` shows where they go and mutes or unmutes products. Muted products are stored in the bot's database (imported once from the old `tracker_notifica` automation, see `HA_TRACKER_AUTOMATION`).
+
+## Notifications from Home Assistant
+
+Some features post Home Assistant events to a topic. Bind each one to the topic where you want it, e.g. `/bind tracker` in a "Tracker" topic and `/bind pulizie`, `/bind energia`, `/bind spazzatura` in a "Casa" topic. A feature that is not bound anywhere sends nothing.
+
+| Feature | Sends |
+| --- | --- |
+| `tracker` | Price (±5 €) and stock changes of the tracked products |
+| `pulizie` | The robot vacuum starts cleaning (once, not when it goes back to wash the mop), is stuck or in error for a minute, a part drops below `VACUUM_PARTS_THRESHOLD` |
+| `energia` | Solar surplus (export above `ENERGY_SURPLUS_KW` for 10 minutes, once a day), daily report at `ENERGY_REPORT_TIME` |
+| `spazzatura` | At `WASTE_REMINDER_TIME`, if something is collected tomorrow: what to put out, with ✅ Fatto / 👌 Non serve buttons. Repeated at `WASTE_REPEAT_TIME` if nobody tapped them |
+| `scene` | Nothing: bind it to the topic where you use `/scene` |
+
+How it works: the bot keeps a connection to the Home Assistant WebSocket API and subscribes to *triggers* (state, numeric state, time of day), the same ones you would use in an automation. Home Assistant evaluates them, including durations and times in its own time zone, and tells the bot when they fire. Events that fire while the bot is offline are lost. If you used Home Assistant automations for the same notifications, turn them off to avoid duplicates.
 
 ## Data and backups
 
@@ -169,9 +202,12 @@ src/homegram/
 ├── config.py           # settings from env
 ├── auth.py             # whitelist guard
 ├── strings.py          # user-facing texts
+├── prompts.py          # follow-up questions for missing command arguments
+├── notify.py           # post a feature's notifications to its bound topics
 ├── db/                 # SQLite connection, migrations, repositories
-├── integrations/       # Home Assistant client
-└── features/           # one module per feature (core, topics, shopping, tracker)
+├── integrations/       # Home Assistant REST client and WebSocket events
+└── features/           # one module per feature (core, topics, shopping, tracker, scene,
+                        # energia, pulizie, spazzatura)
 ```
 
 ### Adding a feature
@@ -180,7 +216,9 @@ src/homegram/
 2. Add it to `FEATURES` in [`src/homegram/features/__init__.py`](src/homegram/features/__init__.py).
 3. If it needs new tables, append a migration to [`src/homegram/db/migrations.py`](src/homegram/db/migrations.py) (never edit released ones).
 4. Set `bindable=True` if it can be attached to a topic, then check `ctx.bindings.features_for(chat_id, thread_id)` in your handlers.
-5. Set `requires_homeassistant=True` if it only makes sense with Home Assistant: it is then registered only when `HA_URL` and `HA_TOKEN` are set.
+5. Set `requires_homeassistant=True` if it only makes sense with Home Assistant: it is then registered only when `HA_URL` and `HA_TOKEN` are set. Use `available=` for extra conditions on the settings (e.g. an entity must be configured).
+6. To notify from Home Assistant events, set `start=` to a coroutine that registers triggers with `ctx.events.subscribe(name, trigger, callback)` (inside an `ctx.events.on_connect` hook if they depend on HA data) and posts with `notify.to_feature(...)`.
+7. To ask for missing command arguments, use `prompts.ask(...)` and register the answer handler with `prompts.on_answer(...)`.
 
 ## License
 

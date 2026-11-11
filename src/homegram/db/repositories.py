@@ -56,9 +56,28 @@ class TopicBindingRepo:
                 for r in await cur.fetchall()
             ]
 
+    async def for_feature(self, feature: str) -> list[TopicBinding]:
+        """Every topic a feature is bound to: where its notifications go."""
+        async with self._db.conn.execute(
+            "SELECT chat_id, thread_id, feature FROM topic_bindings WHERE feature = ? "
+            "ORDER BY chat_id, thread_id",
+            (feature,),
+        ) as cur:
+            return [
+                TopicBinding(r["chat_id"], r["thread_id"], r["feature"])
+                for r in await cur.fetchall()
+            ]
+
+
+# chat_id used by ChatSettingsRepo for bot-wide settings.
+GLOBAL_CHAT = 0
+
 
 class ChatSettingsRepo:
-    """Generic per-chat key/value store for small bits of feature state."""
+    """Generic per-chat key/value store for small bits of feature state.
+
+    Bot-wide settings use the chat id `GLOBAL_CHAT`.
+    """
 
     def __init__(self, db: Database) -> None:
         self._db = db

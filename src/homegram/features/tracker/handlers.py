@@ -17,9 +17,9 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from homegram import prompts, strings
 from homegram.context import get_ctx
 from homegram.features.base import Feature
-from homegram.features.tracker.notifications import device_label
+from homegram.features.topics import topic_link
+from homegram.features.tracker import watch
 from homegram.features.tracker.service import (
-    NotificationStatus,
     Product,
     TrackedLink,
     TrackerError,
@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 FEATURE_NAME = "tracker"
 CALLBACK_PREFIX = "trk"
-NOTIFY_PREFIX = "trn"
+NOTIFY_PREFIX = watch.NOTIFY_PREFIX
 BUTTON_LABEL_LENGTH = 40
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
@@ -129,9 +129,6 @@ def error_text(exc: TrackerError) -> str:
         "duplicate_url": strings.TRACKER_ERR_DUPLICATE_URL,
         "duplicate_shop": strings.TRACKER_ERR_DUPLICATE_SHOP,
         "flow_failed": strings.TRACKER_ERR_FLOW,
-        "no_devices": strings.TRACKER_ERR_NO_DEVICES,
-        "no_products": strings.TRACKER_ERR_NO_PRODUCTS,
-        "notifications_disabled": strings.TRACKER_ERR_NOTIFY_DISABLED,
     }.get(exc.code, strings.GENERIC_ERROR)
     return template.format(shops=supported_shops(), **details)
 
@@ -475,68 +472,67 @@ def _strip_tags(text: str) -> str:
     return html.unescape(text)
 
 
-# --- notifications ------------------------------------------------------------------
+# --- notifications (sent by watch.py to the topics bound with /bind tracker) ----------
 
 
-def render_notifications(status: NotificationStatus) -> tuple[str, InlineKeyboardMarkup]:
-    targets = set(status.settings.targets)
-    muted = set(status.settings.muted)
-    lines = [strings.TRACKER_NOTIFY_ON if status.enabled else strings.TRACKER_NOTIFY_OFF, ""]
-    lines.append(strings.TRACKER_NOTIFY_HELP)
-
-    rows: list[list[InlineKeyboardButton]] = []
-    if status.enabled:
-        toggle = (strings.TRACKER_BTN_NOTIFY_OFF, f"{NOTIFY_PREFIX}:off")
+def render_notifications(
+    products: list[str], muted: set[str], destinations: list[str]
+) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [strings.TRACKER_NOTIFY_TITLE, ""]
+    if destinations:
+        lines.append(strings.TRACKER_NOTIFY_WHERE.format(topics=", ".join(destinations)))
     else:
-        toggle = (strings.TRACKER_BTN_NOTIFY_ON, f"{NOTIFY_PREFIX}:on")
-    rows.append([InlineKeyboardButton(toggle[0], callback_data=toggle[1])])
-
-    lines += ["", strings.TRACKER_NOTIFY_DEVICES]
-    if not status.devices:
-        lines.append(strings.TRACKER_NOTIFY_NO_DEVICES)
-    for index, device in enumerate(status.devices):
-        mark = "✅" if device in targets else "▫️"
-        label = html.escape(device_label(device))
-        lines.append(f"{mark} {label}")
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    f"📱 {mark} {_truncate(device_label(device), BUTTON_LABEL_LENGTH)}",
-                    callback_data=f"{NOTIFY_PREFIX}:dev:{index}",
-                )
-            ]
-        )
-
-    lines += ["", strings.TRACKER_NOTIFY_PRODUCTS]
-    if not status.products:
+        lines.append(strings.TRACKER_NOTIFY_NOWHERE)
+    lines += ["", strings.TRACKER_NOTIFY_HELP, "", strings.TRACKER_NOTIFY_PRODUCTS]
+    if not products:
         lines.append(strings.TRACKER_NOTIFY_NO_PRODUCTS)
-    product_buttons = []
-    for index, product in enumerate(status.products):
+    buttons = []
+    for index, product in enumerate(products):
         mark = "🔕" if product in muted else "🔔"
         lines.append(f"{mark} {html.escape(product)}")
-        product_buttons.append(
+        buttons.append(
             InlineKeyboardButton(
                 f"{mark} {_truncate(product, BUTTON_LABEL_LENGTH // 2)}",
                 callback_data=f"{NOTIFY_PREFIX}:prod:{index}",
             )
         )
-    rows += [product_buttons[i : i + 2] for i in range(0, len(product_buttons), 2)]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append(
         [InlineKeyboardButton(strings.TRACKER_BTN_REFRESH, callback_data=f"{NOTIFY_PREFIX}:ls")]
     )
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
+async def _destinations(context: ContextTypes.DEFAULT_TYPE) -> list[str]:
+    """Where the notifications go, as HTML (links to the topics when possible)."""
+    out = []
+    for binding in await get_ctx(context).bindings.for_feature(watch.FEATURE_NAME):
+        if binding.thread_id == 0:
+            label = strings.BINDINGS_GENERAL
+        else:
+            label = strings.BINDINGS_TOPIC.format(thread_id=binding.thread_id)
+            link = topic_link(binding.chat_id, binding.thread_id)
+            if link:
+                label = f'<a href="{link}">{label}</a>'
+        out.append(label)
+    return out
+
+
+async def _notification_view(
+    context: ContextTypes.DEFAULT_TYPE,
+) -> tuple[list[str], tuple[str, InlineKeyboardMarkup]]:
+    ctx = get_ctx(context)
+    products = [p.name for p in await _service(context).products()]
+    muted = await watch.muted_products(ctx)
+    return products, render_notifications(products, muted, await _destinations(context))
+
+
 async def notifications_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        status = await _service(context).notification_status()
-    except TrackerError as exc:
-        await _reply(update, error_text(exc))
-        return
+        _, (text, markup) = await _notification_view(context)
     except HomeAssistantError as exc:
         await _guard_ha(update, exc)
         return
-    text, markup = render_notifications(status)
     await _reply(update, text, markup)
 
 
@@ -545,28 +541,36 @@ async def on_notify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if query.message is None or not query.data:
         await query.answer()
         return
-    service = _service(context)
+    ctx = get_ctx(context)
     _, action, *rest = query.data.split(":", 2)
+    arg = rest[0] if rest else ""
     try:
-        status = await service.notification_status()
-        index = int(rest[0]) if rest and rest[0].isdigit() else -1
-        if action == "dev" and 0 <= index < len(status.devices):
-            status = await service.toggle_device(status.devices[index])
-        elif action == "prod" and 0 <= index < len(status.products):
-            status = await service.toggle_product(status.products[index])
-        elif action in ("on", "off"):
-            status = await service.set_notifications(action == "on")
-    except TrackerError as exc:
-        await query.answer(_strip_tags(error_text(exc)), show_alert=True)
-        return
+        if action == "mute":  # button under a notification
+            product = await _service(context).product_of(arg)
+            if product is None:
+                await query.answer(strings.TRACKER_GONE, show_alert=True)
+                return
+            muted = await watch.muted_products(ctx)
+            await watch.set_muted_products(ctx, muted | {product.name})
+            await query.answer(strings.TRACKER_MUTED_TOAST.format(product=product.name))
+            await query.edit_message_reply_markup(None)
+            return
+        products, _ = await _notification_view(context)
+        index = int(arg) if arg.isdigit() else -1
+        if action == "prod" and 0 <= index < len(products):
+            muted = await watch.muted_products(ctx)
+            muted ^= {products[index]}
+            await watch.set_muted_products(ctx, muted)
+        _, (text, markup) = await _notification_view(context)
     except HomeAssistantError as exc:
         text = strings.TRACKER_ERR_FORBIDDEN if exc.forbidden else strings.HA_UNAVAILABLE
         await query.answer(_strip_tags(text), show_alert=True)
         return
     await query.answer()
-    text, markup = render_notifications(status)
     try:
-        await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+        await query.edit_message_text(
+            text, parse_mode=ParseMode.HTML, reply_markup=markup, link_preview_options=NO_PREVIEW
+        )
     except BadRequest as exc:
         if "not modified" not in str(exc).lower():
             raise
@@ -597,7 +601,10 @@ FEATURE = Feature(
         ("tracker", "prezzi e disponibilità dei prodotti tracciati"),
         ("tracker_aggiungi", "traccia un prodotto: ti chiedo link e nome"),
         ("tracker_rimuovi", "smetti di tracciare un prodotto"),
-        ("tracker_notifiche", "notifiche: dispositivi, prodotti, on/off"),
+        ("tracker_notifiche", "dove arrivano le notifiche e quali prodotti silenziare"),
     ],
+    bindable=True,
+    topic_hint=strings.TRACKER_TOPIC_HINT,
     requires_homeassistant=True,
+    start=watch.start,
 )
