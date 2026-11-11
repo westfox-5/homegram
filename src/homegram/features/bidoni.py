@@ -1,6 +1,6 @@
-"""Waste collection: /spazzatura (next pickups) and the reminder the evening before.
+"""Waste collection: /bidoni (next pickups) and the reminder the evening before.
 
-The reminder goes to the topics bound with ``/bind spazzatura`` at WASTE_REMINDER_TIME when
+The reminder goes to the topics bound with ``/bind bidoni`` at WASTE_REMINDER_TIME when
 something is collected tomorrow, with "Fatto" / "Non serve" buttons. If nobody taps them it
 is repeated at WASTE_REPEAT_TIME.
 
@@ -31,9 +31,9 @@ from homegram.integrations.homeassistant import HomeAssistantError
 
 log = logging.getLogger(__name__)
 
-FEATURE_NAME = "spazzatura"
-CALLBACK_PREFIX = "spz"
-REMINDER_KEY = "spazzatura.reminder"
+FEATURE_NAME = "bidoni"
+CALLBACK_PREFIX = "bid"
+REMINDER_KEY = "bidoni.reminder"
 INTEGRATION = "waste_collection_schedule"
 UPCOMING_DAYS = 14
 
@@ -203,7 +203,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             log.debug("Could not update reminder %s/%s: %s", chat_id, message_id, exc)
 
 
-async def spazzatura_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def bidoni_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         text = render_upcoming(*await load(get_ctx(context)))
     except HomeAssistantError:
@@ -225,15 +225,13 @@ async def start(app: Application) -> None:
 
     if settings.waste_reminder_time:
         trigger = time_trigger(settings.waste_reminder_time)
-        await events.subscribe("spazzatura.reminder", trigger, first)
+        await events.subscribe("bidoni.reminder", trigger, first)
     if settings.waste_repeat_time:
-        await events.subscribe(
-            "spazzatura.repeat", time_trigger(settings.waste_repeat_time), repeat
-        )
+        await events.subscribe("bidoni.repeat", time_trigger(settings.waste_repeat_time), repeat)
 
 
 def register(app: Application) -> None:
-    app.add_handler(CommandHandler("spazzatura", spazzatura_command))
+    app.add_handler(CommandHandler("bidoni", bidoni_command))
     app.add_handler(CallbackQueryHandler(on_callback, pattern=rf"^{CALLBACK_PREFIX}:"))
 
 
@@ -241,7 +239,7 @@ FEATURE = Feature(
     name=FEATURE_NAME,
     description="Raccolta differenziata",
     register=register,
-    commands=[("spazzatura", "prossimi ritiri della raccolta differenziata")],
+    commands=[("bidoni", "prossimi ritiri della raccolta differenziata")],
     bindable=True,
     topic_hint=strings.WASTE_TOPIC_HINT,
     requires_homeassistant=True,

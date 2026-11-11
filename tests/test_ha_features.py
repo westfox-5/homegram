@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from homegram.db import ChatSettingsRepo, Database, TopicBindingRepo
-from homegram.features import energia, pulizie, scene, spazzatura
+from homegram.features import bidoni, energia, pulizie, scene
 from homegram.integrations.ha_events import HomeAssistantEvents, time_trigger, websocket_url
 
 # --- WebSocket client ------------------------------------------------------------------
@@ -147,14 +147,14 @@ WASTE_STATES = {
 
 
 def test_waste_schedule_and_texts() -> None:
-    schedule = spazzatura.pickups(WASTE_STATES, ["sensor.vpl", "sensor.umido", "sensor.carta"])
+    schedule = bidoni.pickups(WASTE_STATES, ["sensor.vpl", "sensor.umido", "sensor.carta"])
     today = date(2026, 11, 11)
     tomorrow = schedule[date(2026, 11, 12)]
     assert [w.label for w in tomorrow] == ["🔵 Plastica", "🟤 Umido"]
-    text = spazzatura.render_upcoming(today, schedule)
+    text = bidoni.render_upcoming(today, schedule)
     assert "<b>Gio 12/11 (domani)</b>: 🔵 Plastica, 🟤 Umido" in text
     assert "30/12" not in text  # beyond 14 days
-    assert spazzatura.reminder_text(tomorrow) == (
+    assert bidoni.reminder_text(tomorrow) == (
         "🗑 <b>Domani: 🔵 PLASTICA + 🟤 UMIDO</b>\nStasera metti fuori la plastica e l'umido."
     )
 
@@ -162,7 +162,7 @@ def test_waste_schedule_and_texts() -> None:
 @pytest.fixture
 async def app_ctx(db: Database) -> SimpleNamespace:
     bindings = TopicBindingRepo(db)
-    await bindings.bind(-100, 5, "spazzatura", None)
+    await bindings.bind(-100, 5, "bidoni", None)
     ha = MagicMock()
     ha.now = AsyncMock(return_value=datetime(2026, 11, 11, 19, 30, tzinfo=UTC1))
     ha.states = AsyncMock(return_value=WASTE_STATES)
@@ -189,30 +189,30 @@ UTC1 = timezone(timedelta(hours=1))
 
 async def test_waste_reminder_flow(app_ctx: SimpleNamespace) -> None:
     app, bot = app_ctx.app, app_ctx.app.bot
-    await spazzatura.send_reminder(app, again=False)
+    await bidoni.send_reminder(app, again=False)
     assert bot.send_message.await_count == 1
     call = bot.send_message.call_args
     assert call.args[0] == -100 and call.kwargs["message_thread_id"] == 5
     assert "PLASTICA" in call.args[1]
 
-    await spazzatura.send_reminder(app, again=False)  # same evening: not twice
-    await spazzatura.send_reminder(app, again=True)  # nobody answered: repeated
+    await bidoni.send_reminder(app, again=False)  # same evening: not twice
+    await bidoni.send_reminder(app, again=True)  # nobody answered: repeated
     assert bot.send_message.await_count == 2
     assert bot.send_message.call_args.args[1].startswith("⏰")
 
     query = MagicMock()
-    query.data = "spz:done:2026-11-12"
+    query.data = "bid:done:2026-11-12"
     query.from_user = SimpleNamespace(first_name="Ilenia")
     query.answer = AsyncMock()
     context = MagicMock()
     context.application.bot_data = {"homegram": app_ctx.ctx}
     context.bot = bot
-    await spazzatura.on_callback(SimpleNamespace(callback_query=query), context)
+    await bidoni.on_callback(SimpleNamespace(callback_query=query), context)
     edited = [c.kwargs["message_id"] for c in bot.edit_message_text.call_args_list]
     assert edited == [100, 101]  # both reminders updated
     assert bot.edit_message_text.call_args.args[0].endswith("✅ Fatto da Ilenia")
 
-    await spazzatura.send_reminder(app, again=True)  # done: no more reminders
+    await bidoni.send_reminder(app, again=True)  # done: no more reminders
     assert bot.send_message.await_count == 2
 
 

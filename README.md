@@ -12,7 +12,7 @@ A small, modular Telegram bot for your home. Add it to your household group chat
 - 🎬 **Scenes** *(Home Assistant only)*: `/scene` runs your Home Assistant scenes and scripts from buttons.
 - ⚡️ **Energy** *(Home Assistant only)*: `/energia` shows solar, battery, house and grid; a daily report and solar surplus alerts go to a topic.
 - 🤖 **Robot vacuum** *(Home Assistant only)*: notifications when it starts, gets stuck or a part wears out.
-- 🗑 **Waste collection** *(Home Assistant only)*: `/spazzatura` lists the next pickups; a reminder with "Fatto" / "Non serve" buttons the evening before.
+- 🗑 **Waste collection** *(Home Assistant only)*: `/bidoni` lists the next pickups; a reminder with "Fatto" / "Non serve" buttons the evening before.
 - 🔒 **Whitelist** of users and chats.
 
 Commands are grouped by feature: each feature has a main command (`/spesa`, `/tracker`) and sub-commands prefixed with its name (`/spesa_aggiungi`, `/tracker_aggiungi`, …). The old `/lista` and `/spesa <items>` still work as aliases.
@@ -38,7 +38,7 @@ The bot's messages are in Italian (all texts live in [`src/homegram/strings.py`]
 | `/tracker_notifiche` | Where the tracker notifications go, and which products to mute *(Home Assistant only)* |
 | `/scene` | Buttons to run Home Assistant scenes and scripts *(Home Assistant only)* |
 | `/energia` | Solar, battery, house and grid now and today, tomorrow's forecast *(Home Assistant, `ENERGY_*` set)* |
-| `/spazzatura` | Next waste pickups *(Home Assistant, waste_collection_schedule)* |
+| `/bidoni` | Next waste pickups *(Home Assistant, waste_collection_schedule)* |
 
 Arguments in brackets can be left out: the bot then asks for them. For example `/tracker_aggiungi` alone shows the tracked products as buttons (to add another shop to one of them) and waits for the link of a new product, then for its name. The next text message you send in the same chat or topic is the answer; any other command, the ✖️ button or `/annulla` cancel the question, and it expires after 10 minutes.
 
@@ -158,14 +158,14 @@ How it works:
 
 ## Notifications from Home Assistant
 
-Some features post Home Assistant events to a topic. Bind each one to the topic where you want it, e.g. `/bind tracker` in a "Tracker" topic and `/bind pulizie`, `/bind energia`, `/bind spazzatura` in a "Casa" topic. A feature that is not bound anywhere sends nothing.
+Some features post Home Assistant events to a topic. Bind each one to the topic where you want it, e.g. `/bind tracker` in a "Tracker" topic and `/bind pulizie`, `/bind energia`, `/bind bidoni` in a "Casa" topic. A feature that is not bound anywhere sends nothing.
 
 | Feature | Sends |
 | --- | --- |
 | `tracker` | Price (±5 €) and stock changes of the tracked products |
 | `pulizie` | The robot vacuum starts cleaning (once, not when it goes back to wash the mop), is stuck or in error for a minute, a part drops below `VACUUM_PARTS_THRESHOLD` |
 | `energia` | Solar surplus (export above `ENERGY_SURPLUS_KW` for 10 minutes, once a day), daily report at `ENERGY_REPORT_TIME` |
-| `spazzatura` | At `WASTE_REMINDER_TIME`, if something is collected tomorrow: what to put out, with ✅ Fatto / 👌 Non serve buttons. Repeated at `WASTE_REPEAT_TIME` if nobody tapped them |
+| `bidoni` | At `WASTE_REMINDER_TIME`, if something is collected tomorrow: what to put out, with ✅ Fatto / 👌 Non serve buttons. Repeated at `WASTE_REPEAT_TIME` if nobody tapped them |
 | `scene` | Nothing: bind it to the topic where you use `/scene` |
 
 How it works: the bot keeps a connection to the Home Assistant WebSocket API and subscribes to *triggers* (state, numeric state, time of day), the same ones you would use in an automation. Home Assistant evaluates them, including durations and times in its own time zone, and tells the bot when they fire. Events that fire while the bot is offline are lost. If you used Home Assistant automations for the same notifications, turn them off to avoid duplicates.
@@ -207,7 +207,7 @@ src/homegram/
 ├── db/                 # SQLite connection, migrations, repositories
 ├── integrations/       # Home Assistant REST client and WebSocket events
 └── features/           # one module per feature (core, topics, shopping, tracker, scene,
-                        # energia, pulizie, spazzatura)
+                        # energia, pulizie, bidoni)
 ```
 
 ### Adding a feature

@@ -40,7 +40,7 @@ def test_tracker_requires_home_assistant(monkeypatch: pytest.MonkeyPatch) -> Non
 
     declared = {cmd for feature in enabled_features(settings) for cmd, _ in feature.commands}
     assert declared <= registered_commands(app)
-    assert registered_commands(app) >= TRACKER_COMMANDS | {"scene", "spazzatura"}
+    assert registered_commands(app) >= TRACKER_COMMANDS | {"scene", "bidoni"}
     # Features that need entities stay off until they are configured.
     assert "energia" not in registered_commands(app)
     names = {f.name for f in enabled_features(settings)}
@@ -58,7 +58,7 @@ def test_configured_features(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.ha_scenes == ("script.a", "scene.b")
     assert settings.energy_sensors == {"solar_power": "sensor.solar"}
     names = {f.name for f in enabled_features(settings)}
-    assert {"pulizie", "energia", "scene", "spazzatura", "tracker"} <= names
+    assert {"pulizie", "energia", "scene", "bidoni", "tracker"} <= names
 
 
 def test_feature_names_are_unique() -> None:

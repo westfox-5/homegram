@@ -1,7 +1,16 @@
 """Feature registry. To add a feature, create a module exposing `FEATURE` and list it here."""
 
 from homegram.config import Settings
-from homegram.features import core, energia, pulizie, scene, shopping, spazzatura, topics, tracker
+from homegram.features import (
+    bidoni,
+    core,
+    energia,
+    pulizie,
+    scene,
+    shopping,
+    topics,
+    tracker,
+)
 from homegram.features.base import Feature
 
 FEATURES: list[Feature] = [
@@ -12,7 +21,7 @@ FEATURES: list[Feature] = [
     scene.FEATURE,
     energia.FEATURE,
     pulizie.FEATURE,
-    spazzatura.FEATURE,
+    bidoni.FEATURE,
 ]
 
 

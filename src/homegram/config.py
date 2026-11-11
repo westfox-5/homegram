@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     ha_vacuum_parts: StrList = ()  # lifespan sensors (%); empty = every % sensor of the robot
     vacuum_parts_threshold: float = 10
 
-    # Waste collection (/spazzatura): sensors of the waste_collection_schedule integration
+    # Waste collection (/bidoni): sensors of the waste_collection_schedule integration
     # (empty = found automatically), reminder the evening before and its repetition.
     ha_waste_sensors: StrList = ()
     waste_reminder_time: str = "19:30"
