@@ -39,6 +39,8 @@ GROUP = -1
 TTL = 600  # seconds
 CALLBACK_CANCEL = "prm:cancel"
 CANCEL_COMMAND = "annulla"
+# bot_data key: whether the bot sees every group message (privacy mode off), set at startup.
+READS_ALL_KEY = "reads_all_group_messages"
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
 AnswerHandler = Callable[[Update, ContextTypes.DEFAULT_TYPE, str, dict[str, Any]], Awaitable[None]]
@@ -113,6 +115,14 @@ async def ask(
     of the tapped inline button is replaced instead of sending a new one.
     """
     set_pending(update, context, key, **data)
+    chat = update.effective_chat
+    if (
+        chat is not None
+        and chat.type != chat.PRIVATE
+        and not context.application.bot_data.get(READS_ALL_KEY, True)
+    ):
+        # Privacy mode: plain messages in groups do not reach the bot, replies do.
+        text += strings.PROMPT_REPLY_HINT
     markup = with_cancel(rows)
     query = update.callback_query
     if edit and query is not None:

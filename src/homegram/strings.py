@@ -58,6 +58,7 @@ GENERIC_ERROR = "⚠️ Qualcosa è andato storto. Riprova."
 PROMPT_BTN_CANCEL = "✖️ Annulla"
 PROMPT_CANCELLED = "↩️ Annullato."
 PROMPT_NOTHING = "Nessuna domanda in corso."
+PROMPT_REPLY_HINT = "\n<i>↩️ Rispondi a questo messaggio.</i>"
 PROMPT_EXPIRED = "⌛ Domanda scaduta: rilancia il comando."
 
 TRACKER_TITLE = "📈 <b>Tracker prezzi</b> ({count})"

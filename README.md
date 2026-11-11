@@ -47,7 +47,7 @@ Arguments in brackets can be left out: the bot then asks for them. For example `
 ### 1. Create the bot
 
 1. Talk to [@BotFather](https://t.me/BotFather), run `/newbot` and copy the token.
-2. Run `/setprivacy` → choose your bot → **Disable**. This lets the bot read normal messages in a bound topic and the answers to its questions (otherwise it only sees commands).
+2. Run `/setprivacy` → choose your bot → **Disable**. This lets the bot read normal messages in a bound topic and the answers to its questions (otherwise it only sees commands and replies to its own messages). Telegram applies the change to a group only after you remove the bot and add it again; making the bot an admin of the group works too. The bot logs a warning at startup while privacy mode is on, and its questions then ask you to reply to them.
 3. Add the bot to your group.
 
 ### 2. Configure

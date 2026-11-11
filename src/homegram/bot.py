@@ -10,7 +10,7 @@ from telegram import BotCommand, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, ApplicationBuilder, ContextTypes, TypeHandler
 
-from homegram import auth, strings
+from homegram import auth, prompts, strings
 from homegram.config import Settings
 from homegram.context import CTX_KEY, AppContext
 from homegram.db import ChatSettingsRepo, Database, TopicBindingRepo
@@ -81,9 +81,17 @@ async def _post_init(app: Application) -> None:
             "Send /id to the bot to find the ids to allow."
         )
     me = await app.bot.get_me()
+    app.bot_data[prompts.READS_ALL_KEY] = bool(me.can_read_all_group_messages)
     log.info(
         "HomeGram started as @%s (shopping backend: %s)", me.username, settings.shopping_backend
     )
+    if not me.can_read_all_group_messages:
+        log.warning(
+            "Privacy mode is on: in groups the bot only sees commands and replies to its own "
+            "messages (unless it is an admin). Answers to its questions must be replies, and "
+            "free text in bound topics is ignored. Turn it off with @BotFather → /setprivacy "
+            "→ Disable, then remove and re-add the bot to the group, or make it an admin."
+        )
 
 
 async def _post_shutdown(app: Application) -> None:

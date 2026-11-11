@@ -193,3 +193,17 @@ async def test_bad_link_is_asked_again() -> None:
     update = await answer(context, URL)
     assert "Come chiamo" in last_reply(update)
     service.add.assert_not_awaited()
+
+
+async def test_privacy_mode_asks_for_a_reply_in_groups(answers: list[Any]) -> None:
+    context = make_context()
+    update = make_update("/cmd")
+    update.effective_chat.type = "supergroup"
+    update.effective_chat.PRIVATE = "private"
+    context.application.bot_data[prompts.READS_ALL_KEY] = False
+    await prompts.ask(update, context, "test.ask", "Domanda?")
+    assert last_reply(update) == "Domanda?" + strings.PROMPT_REPLY_HINT
+
+    context.application.bot_data[prompts.READS_ALL_KEY] = True
+    await prompts.ask(update, context, "test.ask", "Domanda?")
+    assert last_reply(update) == "Domanda?"
