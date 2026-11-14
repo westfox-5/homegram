@@ -23,6 +23,16 @@ BROWSER_UA = (
 )
 
 
+def browser_headers(language: str) -> dict[str, str]:
+    """Request headers of a regular browser. Some shops (behind Cloudflare) answer 403 to
+    Home Assistant's default User-Agent."""
+    return {
+        "User-Agent": BROWSER_UA,
+        "Accept-Language": f"{language};q=0.9",
+        "Accept": "text/html,application/xhtml+xml",
+    }
+
+
 @dataclass(frozen=True)
 class SensorSpec:
     kind: str
@@ -66,6 +76,7 @@ class Shop:
 
 
 # --- wisp.store (PrestaShop): price in an OpenGraph meta tag, stock in a data attribute ----
+# Behind Cloudflare: since November 2026 it answers 403 to Home Assistant's User-Agent.
 
 
 def _strip_query(url: SplitResult) -> str | None:
@@ -96,6 +107,7 @@ WISP = Shop(
             unit="pz",
         ),
     ),
+    headers=browser_headers("it-IT,it"),
 )
 
 # --- Amazon (EU stores, prices formatted like "1.234,56€") ---------------------------------
@@ -134,11 +146,7 @@ def _amazon_shop(tld: str, name: str, language: str) -> Shop:
         hosts=(f"amazon.{tld}", f"www.amazon.{tld}"),
         normalize=_amazon(tld),
         sensors=(_AMAZON_PRICE, _AMAZON_STOCK),
-        headers={
-            "User-Agent": BROWSER_UA,
-            "Accept-Language": f"{language};q=0.9",
-            "Accept": "text/html,application/xhtml+xml",
-        },
+        headers=browser_headers(language),
     )
 
 

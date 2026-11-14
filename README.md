@@ -152,7 +152,8 @@ Supported shops: **wisp.store** and **Amazon** (`.it`, `.de`, `.fr`, `.es`). Ama
 How it works:
 
 - Each link is a Scrape config entry in Home Assistant (its title is the product URL) with two sensors named `<product> · <shop> · prezzo` and `<product> · <shop> · disponibilità`. Home Assistant is the only source of truth: nothing about the tracker is stored in the bot's database.
-- Home Assistant polls each page every ~10 minutes. Some shops (Amazon) may start blocking requests: the price sensor then becomes *unavailable* instead of showing a wrong value.
+- The bot refreshes every page every 30 minutes (`homeassistant.update_entity`, at :00 and :30) and turns off Home Assistant's own polling of those entries (every 10 minutes, not configurable from the UI). While the bot is offline the sensors are not refreshed. At every connection the bot also updates entries created with an older shop profile (e.g. the request headers).
+- Requests use a browser User-Agent: wisp.store (behind Cloudflare) answers 403 to Home Assistant's own. Some shops may still start blocking requests: the price sensor then becomes *unavailable* instead of showing a wrong value.
 - Dashboards and automations can find every tracked product through the same naming convention, e.g. in a template: `integration_entities('scrape')` + `state_attr(e, 'friendly_name').split(' · ')`, and the URL with `config_entry_attr(config_entry_id(e), 'title')`.
 - **Notifications** go to the topics bound with `/bind tracker` (`/unbind tracker` to stop): a price change of at least 1 € (🔴 up, 🟢 down), or a product going in or out of stock (not every piece sold). Each one has a button to mute that product; `/tracker_notifiche` shows where they go and mutes or unmutes products. Muted products are stored in the bot's database (imported once from the old `tracker_notifica` automation, see `HA_TRACKER_AUTOMATION`).
 

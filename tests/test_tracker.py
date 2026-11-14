@@ -1,6 +1,7 @@
 import json
 from collections.abc import AsyncIterator
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -23,6 +24,7 @@ from homegram.features.tracker.shops import (
     WISP,
     ShortLinkError,
     UnsupportedUrl,
+    browser_headers,
     expand,
     in_stock,
     resolve,
@@ -131,6 +133,8 @@ def test_payloads() -> None:
     assert sensor["select"] == 'meta[property="product:price:amount"]'
     assert sensor["additional"]["attribute"] == "content"
     assert sensor["additional"]["unit_of_measurement"] == "EUR"
+    # wisp.store (Cloudflare) answers 403 to Home Assistant's own User-Agent
+    assert resource["additional"]["headers"]["User-Agent"].startswith("Mozilla/5.0")
 
 
 # --- grouping & rendering -------------------------------------------------------
@@ -240,6 +244,95 @@ async def test_add_link_to_existing_product(ha: HomeAssistantClient) -> None:
     assert json.loads(flow.calls.last.request.content)["resource"] == AMAZON_URL
     names = [json.loads(c.request.content)["name"] for c in sub.calls]
     assert names == ["U7 Pro Wall · Amazon · prezzo", "U7 Pro Wall · Amazon · disponibilità"]
+
+
+@respx.mock
+async def test_add_turns_off_polling(ha: HomeAssistantClient) -> None:
+    created = [
+        row("sensor.a", "Switch", "wisp.store", "prezzo", "99.0", "new", WISP_URL),
+        row("sensor.b", "Switch", "wisp.store", "disponibilità", "3", "new", WISP_URL),
+    ]
+    mock_template([], created, created)
+    flow, _ = mock_flows()
+    events = AsyncMock()
+
+    await TrackerService(ha, events).add("Switch", WISP_URL)
+
+    headers = json.loads(flow.calls.last.request.content)["additional"]["headers"]
+    assert headers == browser_headers("it-IT,it")
+    events.command.assert_awaited_once_with(
+        {"type": "config_entries/update", "entry_id": "new", "pref_disable_polling": True}
+    )
+
+
+@respx.mock
+async def test_refresh_updates_one_entity_per_link(ha: HomeAssistantClient) -> None:
+    mock_template(ROWS)
+    update = respx.post(f"{BASE}/api/services/homeassistant/update_entity").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    await TrackerService(ha).refresh()
+    assert json.loads(update.calls.last.request.content) == {
+        "entity_id": ["sensor.u7_amz_prezzo", "sensor.u7_wisp_prezzo"]
+    }
+
+
+def options_form(flow_id: str, headers: dict[str, str] | None) -> dict[str, Any]:
+    description = {"suggested_value": headers} if headers is not None else None
+    return {
+        "type": "form",
+        "flow_id": flow_id,
+        "data_schema": [
+            {"name": "resource"},
+            {
+                "name": "additional",
+                "type": "expandable",
+                "schema": [
+                    {"name": "headers", "description": description},
+                    {"name": "timeout"},
+                ],
+            },
+        ],
+    }
+
+
+@respx.mock
+async def test_configure_entries(ha: HomeAssistantClient) -> None:
+    mock_template(ROWS)
+    respx.get(f"{BASE}/api/config/config_entries/entry", params={"domain": "scrape"}).mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"entry_id": "e1", "pref_disable_polling": False},  # old wisp entry
+                {"entry_id": "e2", "pref_disable_polling": True},  # already fine
+                {"entry_id": "other", "pref_disable_polling": False},  # not a tracked link
+            ],
+        )
+    )
+    options = f"{BASE}/api/config/config_entries/options/flow"
+
+    def start(request: httpx.Request) -> httpx.Response:
+        entry = json.loads(request.content)["handler"]
+        if entry == "e1":
+            return httpx.Response(200, json=options_form("o1", None))
+        return httpx.Response(200, json=options_form("o2", browser_headers("it-IT,it")))
+
+    start_route = respx.post(options).mock(side_effect=start)
+    submit = respx.post(f"{options}/o1").mock(
+        return_value=httpx.Response(200, json={"type": "create_entry"})
+    )
+    abort = respx.delete(f"{options}/o2").mock(return_value=httpx.Response(200, json={}))
+    events = AsyncMock()
+
+    await TrackerService(ha, events).configure_entries()
+
+    assert start_route.call_count == 2
+    sent = json.loads(submit.calls.last.request.content)
+    assert sent["resource"] == WISP_URL and sent["additional"]["headers"] == WISP.headers
+    assert abort.called
+    events.command.assert_awaited_once_with(
+        {"type": "config_entries/update", "entry_id": "e1", "pref_disable_polling": True}
+    )
 
 
 @respx.mock

@@ -48,7 +48,7 @@ async def _post_init(app: Application) -> None:
         shopping = SqliteShoppingBackend(db)
 
     features = enabled_features(settings)
-    tracker = TrackerService(ha) if ha else None
+    tracker = TrackerService(ha, events) if ha else None
 
     app.bot_data[CTX_KEY] = AppContext(
         settings=settings,

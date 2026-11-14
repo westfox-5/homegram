@@ -154,6 +154,30 @@ class HomeAssistantClient:
     async def delete_config_entry(self, entry_id: str) -> None:
         await self._request("DELETE", f"/api/config/config_entries/entry/{entry_id}")
 
+    async def config_entries(self, domain: str) -> list[dict[str, Any]]:
+        """Config entries of an integration (entry_id, title, pref_disable_polling, ...)."""
+        data = await self._request(
+            "GET", "/api/config/config_entries/entry", params={"domain": domain}
+        )
+        return list(data or [])
+
+    async def options_flow(self, entry_id: str) -> dict[str, Any]:
+        """Start the options flow of a config entry. Returns its first step (usually a form)."""
+        return await self._request(
+            "POST", "/api/config/config_entries/options/flow", json={"handler": entry_id}
+        )
+
+    async def options_flow_submit(self, flow_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return await self._request(
+            "POST",
+            f"/api/config/config_entries/options/flow/{flow_id}",
+            json=data,
+            timeout=FLOW_TIMEOUT,
+        )
+
+    async def options_flow_abort(self, flow_id: str) -> None:
+        await self._request("DELETE", f"/api/config/config_entries/options/flow/{flow_id}")
+
     # --- automations ----------------------------------------------------------
 
     async def automation_config(self, automation_id: str) -> dict[str, Any] | None:

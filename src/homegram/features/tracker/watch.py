@@ -2,10 +2,13 @@
 
 Notifications go to every topic bound with ``/bind tracker``. Muted products are a bot-wide
 setting; the first time they are imported from the old Home Assistant automation.
+
+The same connection drives the refresh of the tracked pages (every `REFRESH_MINUTES`).
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -17,6 +20,7 @@ from homegram import notify, strings
 from homegram.context import CTX_KEY, AppContext
 from homegram.db.repositories import GLOBAL_CHAT
 from homegram.features.tracker.alerts import alert_for
+from homegram.features.tracker.service import REFRESH_MINUTES
 from homegram.integrations.homeassistant import HomeAssistantError
 
 log = logging.getLogger(__name__)
@@ -24,6 +28,8 @@ log = logging.getLogger(__name__)
 FEATURE_NAME = "tracker"
 MUTED_KEY = "tracker.muted"
 SUBSCRIPTION = "tracker"
+REFRESH_SUBSCRIPTION = "tracker_refresh"
+REFRESH_TRIGGER = {"trigger": "time_pattern", "minutes": f"/{REFRESH_MINUTES}"}
 NOTIFY_PREFIX = "trn"
 
 
@@ -105,5 +111,24 @@ async def start(app: Application) -> None:
         trigger = {"trigger": "state", "entity_id": entities, "to": None} if entities else []
         await events.subscribe(SUBSCRIPTION, trigger, callback)
 
+    async def scrape(_trigger: dict[str, Any]) -> None:
+        await tracker.refresh()
+
+    tasks: set[asyncio.Task[None]] = set()
+
+    async def configure_entries() -> None:
+        try:
+            await tracker.configure_entries()
+        except Exception:
+            log.warning("Could not configure the tracker's scrape entries", exc_info=True)
+
+    async def configure() -> None:
+        # In the background: it may take a while and must not delay the subscriptions.
+        task = asyncio.create_task(configure_entries())
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+
     events.on_connect(refresh)  # also picks up sensors added or renamed in HA
+    events.on_connect(configure)  # entries added by hand in HA, or by older versions
     tracker.on_change(refresh)
+    await events.subscribe(REFRESH_SUBSCRIPTION, REFRESH_TRIGGER, scrape)

@@ -10,6 +10,7 @@ import pytest
 from homegram.db import ChatSettingsRepo, Database, TopicBindingRepo
 from homegram.features import bidoni, energia, pulizie, scene
 from homegram.integrations.ha_events import HomeAssistantEvents, time_trigger, websocket_url
+from homegram.integrations.homeassistant import HomeAssistantError
 
 # --- WebSocket client ------------------------------------------------------------------
 
@@ -31,6 +32,13 @@ class FakeSocket:
             await self.inbox.put(json.dumps({"type": "auth_ok" if ok else "auth_invalid"}))
         elif data["type"] == "subscribe_trigger":
             await self.inbox.put(json.dumps({"id": data["id"], "type": "result", "success": True}))
+        elif data["type"] == "config_entries/update":
+            ok = data["entry_id"] == "e1"
+            reply = {"id": data["id"], "type": "result", "success": ok}
+            reply |= (
+                {"result": {"require_restart": False}} if ok else {"error": {"message": "nope"}}
+            )
+            await self.inbox.put(json.dumps(reply))
 
     async def recv(self) -> str:
         return await self.inbox.get()
@@ -92,6 +100,23 @@ async def test_events_subscribe_dispatch_and_replace() -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_events_command_uses_its_own_connection() -> None:
+    sockets: list[FakeSocket] = []
+
+    async def connector(url: str) -> FakeSocket:
+        sockets.append(FakeSocket())
+        return sockets[-1]
+
+    events = HomeAssistantEvents("http://ha.test", "token", connector=connector)
+    update = {"type": "config_entries/update", "entry_id": "e1", "pref_disable_polling": True}
+    assert await events.command(update) == {"require_restart": False}
+    assert sockets[0].closed and sockets[0].sent[-1] == {"id": 1, **update}
+
+    with pytest.raises(HomeAssistantError, match="nope"):
+        await events.command({**update, "entry_id": "missing"})
+    assert len(sockets) == 2 and sockets[1].closed
 
 
 # --- energy ------------------------------------------------------------------------------

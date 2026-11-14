@@ -4,6 +4,10 @@ Home Assistant is the single source of truth: every tracked link is a scrape con
 (its title is the product URL) with two sensors named ``<product> · <shop> · <kind>``.
 The bot reads them back with a template, so the HA dashboard and automations can use the
 same naming convention without any extra state.
+
+Polling: Home Assistant's own polling of scrape entries (every 10 minutes, not configurable
+from the UI) is turned off on tracked links, and the bot refreshes them every
+`REFRESH_MINUTES` with `homeassistant.update_entity`.
 """
 
 from __future__ import annotations
@@ -19,10 +23,12 @@ from homegram.features.tracker.shops import (
     KIND_PRICE,
     KIND_STOCK,
     Shop,
+    UnsupportedUrl,
     expand,
     in_stock,
     resolve,
 )
+from homegram.integrations.ha_events import HomeAssistantEvents
 from homegram.integrations.homeassistant import HomeAssistantClient, HomeAssistantError
 
 log = logging.getLogger(__name__)
@@ -30,6 +36,7 @@ log = logging.getLogger(__name__)
 SCRAPE = "scrape"
 SEPARATOR = " · "
 MAX_NAME_LENGTH = 60
+REFRESH_MINUTES = 30  # a divisor of 60 (used as a time_pattern trigger)
 
 # All scrape sensors following the naming convention, with their config entry and URL.
 TRACKER_TEMPLATE = """
@@ -134,9 +141,20 @@ def group_products(rows: list[dict[str, Any]]) -> list[Product]:
     return sorted(products.values(), key=lambda p: p.name.casefold())
 
 
+def _current_headers(form: dict[str, Any]) -> dict[str, str]:
+    """Headers currently set on a scrape entry, read from its options form."""
+    for field_ in form.get("data_schema") or []:
+        for inner in field_.get("schema") or []:
+            if inner.get("name") == "headers":
+                return dict((inner.get("description") or {}).get("suggested_value") or {})
+    return {}
+
+
 class TrackerService:
-    def __init__(self, ha: HomeAssistantClient) -> None:
+    def __init__(self, ha: HomeAssistantClient, events: HomeAssistantEvents | None = None) -> None:
         self._ha = ha
+        # Without the WebSocket API, HA keeps polling the entries on its own.
+        self._events = events
         # Called after products or links change (e.g. to update the notification triggers).
         self._listeners: list[Callable[[], Awaitable[None]]] = []
 
@@ -230,6 +248,10 @@ class TrackerService:
         link = await self._wait_for_link(entry_id, len(shop.sensors))
         if link is None:  # sensors not loaded yet: report what we know
             link = TrackedLink(entry_id, canonical, name, shop.name)
+        try:
+            await self._disable_polling(entry_id)
+        except Exception:
+            log.warning("Could not turn off polling of scrape entry %s", entry_id, exc_info=True)
         await self._changed()
         product = await self.find_product(name) or Product(name, [link])
         return product, link, existing is None
@@ -252,6 +274,64 @@ class TrackerService:
                 await self._changed()
                 return product
         return None
+
+    async def refresh(self) -> None:
+        """Ask Home Assistant to scrape every tracked page now (one request per link)."""
+        entities = [
+            link.entities.get(KIND_PRICE) or next(iter(link.entities.values()))
+            for product in await self.products()
+            for link in product.links
+            if link.entities
+        ]
+        if entities:
+            await self._ha.call_service(
+                "homeassistant", "update_entity", {"entity_id": sorted(entities)}
+            )
+
+    async def configure_entries(self) -> None:
+        """Bring the scrape entries of tracked links in line with their shop profile.
+
+        Updates the request headers of entries created with an older profile and turns off
+        HA's own polling. Idempotent: entries that are already fine are left untouched.
+        """
+        polling = {
+            e["entry_id"]: not e.get("pref_disable_polling")
+            for e in await self._ha.config_entries(SCRAPE)
+        }
+        for product in await self.products():
+            for link in product.links:
+                if link.entry_id not in polling:
+                    continue
+                try:
+                    shop, url = resolve(link.url)
+                    await self._sync_headers(link.entry_id, shop, url)
+                    if polling[link.entry_id]:
+                        await self._disable_polling(link.entry_id)
+                except UnsupportedUrl:
+                    continue
+                except Exception:
+                    log.warning("Could not configure scrape entry %s", link.url, exc_info=True)
+
+    async def _sync_headers(self, entry_id: str, shop: Shop, url: str) -> None:
+        form = await self._ha.options_flow(entry_id)
+        if form.get("type") != "form":
+            log.warning("Unexpected options flow of scrape entry %s: %s", entry_id, form)
+            return
+        if _current_headers(form) == shop.headers:
+            await self._ha.options_flow_abort(form["flow_id"])
+            return
+        result = await self._ha.options_flow_submit(form["flow_id"], shop.resource_data(url))
+        if result.get("type") != "create_entry":
+            raise HomeAssistantError(f"options flow failed: {result.get('errors') or result}")
+        log.info("Updated the request headers of %s", url)
+
+    async def _disable_polling(self, entry_id: str) -> None:
+        if self._events is None:
+            return
+        await self._events.command(
+            {"type": "config_entries/update", "entry_id": entry_id, "pref_disable_polling": True}
+        )
+        log.info("Turned off Home Assistant polling of scrape entry %s", entry_id)
 
     async def _wait_for_link(
         self, entry_id: str, sensors: int, *, wait: float = 20.0, interval: float = 2.0

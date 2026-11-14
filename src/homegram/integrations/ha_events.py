@@ -22,6 +22,8 @@ from typing import Any, Protocol
 
 from websockets.asyncio.client import connect
 
+from homegram.integrations.homeassistant import HomeAssistantError
+
 log = logging.getLogger(__name__)
 
 Callback = Callable[[dict[str, Any]], Awaitable[None]]
@@ -29,6 +31,7 @@ Trigger = dict[str, Any] | list[dict[str, Any]]
 
 BACKOFF_MIN = 2.0
 BACKOFF_MAX = 60.0
+COMMAND_TIMEOUT = 15.0
 
 
 class Socket(Protocol):
@@ -124,6 +127,29 @@ class HomeAssistantEvents:
                     sub.message_id = None
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, BACKOFF_MAX)
+
+    async def command(self, message: dict[str, Any]) -> Any:
+        """Run one WebSocket API command (e.g. `config_entries/update`) and return its result.
+
+        It uses a short-lived connection of its own, so it works from on-connect hooks and
+        while the event connection is down. Raises `HomeAssistantError` if HA refuses it.
+        """
+        async with asyncio.timeout(COMMAND_TIMEOUT):
+            socket = await self._connect(self._url)
+            try:
+                await self._authenticate(socket)
+                await socket.send(json.dumps({"id": 1, **message}))
+                while True:
+                    reply = json.loads(await socket.recv())
+                    if reply.get("type") == "result" and reply.get("id") == 1:
+                        break
+            finally:
+                with contextlib.suppress(Exception):
+                    await socket.close()
+        if not reply.get("success"):
+            error = reply.get("error") or {}
+            raise HomeAssistantError(f"{message.get('type')}: {error.get('message') or error}")
+        return reply.get("result")
 
     async def close(self) -> None:
         if self._socket is not None:
