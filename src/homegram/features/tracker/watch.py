@@ -3,7 +3,7 @@
 Notifications go to every topic bound with ``/bind tracker``. Muted products are a bot-wide
 setting; the first time they are imported from the old Home Assistant automation.
 
-The same connection drives the refresh of the tracked pages (every `REFRESH_MINUTES`).
+The same connection drives the refresh of the tracked pages (every `REFRESH_HOURS`).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from homegram import notify, strings
 from homegram.context import CTX_KEY, AppContext
 from homegram.db.repositories import GLOBAL_CHAT
 from homegram.features.tracker.alerts import alert_for
-from homegram.features.tracker.service import REFRESH_MINUTES
+from homegram.features.tracker.service import REFRESH_HOURS
 from homegram.integrations.homeassistant import HomeAssistantError
 
 log = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ FEATURE_NAME = "tracker"
 MUTED_KEY = "tracker.muted"
 SUBSCRIPTION = "tracker"
 REFRESH_SUBSCRIPTION = "tracker_refresh"
-REFRESH_TRIGGER = {"trigger": "time_pattern", "minutes": f"/{REFRESH_MINUTES}"}
+REFRESH_TRIGGER = {"trigger": "time_pattern", "hours": f"/{REFRESH_HOURS}", "minutes": 0}
 NOTIFY_PREFIX = "trn"
 
 

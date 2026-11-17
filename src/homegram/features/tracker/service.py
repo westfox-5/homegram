@@ -7,7 +7,7 @@ same naming convention without any extra state.
 
 Polling: Home Assistant's own polling of scrape entries (every 10 minutes, not configurable
 from the UI) is turned off on tracked links, and the bot refreshes them every
-`REFRESH_MINUTES` with `homeassistant.update_entity`.
+`REFRESH_HOURS` with `homeassistant.update_entity`.
 """
 
 from __future__ import annotations
@@ -36,7 +36,10 @@ log = logging.getLogger(__name__)
 SCRAPE = "scrape"
 SEPARATOR = " · "
 MAX_NAME_LENGTH = 60
-REFRESH_MINUTES = 30  # a divisor of 60 (used as a time_pattern trigger)
+# A divisor of 24 (used as a time_pattern trigger: at 00:00, 08:00 and 16:00). Refreshing
+# all pages at once is heavy for a small Home Assistant host and shops rate-limit
+# frequent requests (wisp.store answered 429 with a 30-minute interval).
+REFRESH_HOURS = 8
 
 # All scrape sensors following the naming convention, with their config entry and URL.
 TRACKER_TEMPLATE = """
