@@ -107,7 +107,7 @@ From now on, every message written in that topic is added to the list (the bot r
 | `HA_VACUUM_PARTS` | auto | Comma-separated lifespan sensors (%). Empty: every `%` sensor of the robot's device |
 | `VACUUM_PARTS_THRESHOLD` | `10` | Notify when a part drops below this % |
 | `HA_WASTE_SENSORS` | auto | Comma-separated waste_collection_schedule sensors. Empty: all of them |
-| `WASTE_REMINDER_TIME` / `WASTE_REPEAT_TIME` | `19:30` / `21:30` | Reminder the evening before a pickup, and its repetition if nobody answered (empty: no repetition) |
+| `WASTE_REMINDER_TIME` / `WASTE_REPEAT_TIME` | `15:30` / `20:00` | Reminder the evening before a pickup, and its repetition if nobody answered (empty: no repetition) |
 | `ENERGY_SOLAR_POWER`, `ENERGY_LOAD_POWER`, `ENERGY_GRID_POWER`, `ENERGY_BATTERY_POWER`, `ENERGY_BATTERY_SOC` | — | Power sensors (W or kW) and battery %. Grid: > 0 import, < 0 export. Battery: > 0 charging |
 | `ENERGY_SOLAR_TODAY`, `ENERGY_LOAD_TODAY`, `ENERGY_IMPORT_TODAY`, `ENERGY_EXPORT_TODAY` | — | Today's totals (kWh) |
 | `ENERGY_FORECAST_TODAY`, `ENERGY_FORECAST_TOMORROW`, `ENERGY_PEAK_TOMORROW` | — | Solar forecast (e.g. Forecast.Solar): kWh and the time of tomorrow's peak |

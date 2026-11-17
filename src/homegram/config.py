@@ -58,10 +58,10 @@ class Settings(BaseSettings):
     vacuum_parts_threshold: float = 10
 
     # Waste collection (/bidoni): sensors of the waste_collection_schedule integration
-    # (empty = found automatically), reminder the evening before and its repetition.
+    # (empty = found automatically), reminder the day before and its repetition.
     ha_waste_sensors: StrList = ()
-    waste_reminder_time: str = "19:30"
-    waste_repeat_time: str = "21:30"  # empty: no repetition
+    waste_reminder_time: str = "15:30"
+    waste_repeat_time: str = "20:00"  # empty: no repetition
 
     # Scenes (/scene): scripts or scenes to show. Empty = every scene and every script
     # without input fields.
