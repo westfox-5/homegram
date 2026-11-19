@@ -66,11 +66,14 @@ class HomeAssistantClient:
         data: dict[str, Any],
         *,
         return_response: bool = False,
+        request_timeout: float | None = None,
     ) -> Any:
+        """Call a service; `request_timeout` overrides the client's default for slow services."""
         path = f"/api/services/{domain}/{service}"
         if return_response:
             path += "?return_response"
-        return await self._request("POST", path, json=data)
+        extra: dict[str, Any] = {} if request_timeout is None else {"timeout": request_timeout}
+        return await self._request("POST", path, json=data, **extra)
 
     # --- todo lists -------------------------------------------------------
 

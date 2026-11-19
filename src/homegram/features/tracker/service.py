@@ -40,6 +40,10 @@ MAX_NAME_LENGTH = 60
 # all pages at once is heavy for a small Home Assistant host and shops rate-limit
 # frequent requests (wisp.store answered 429 with a 30-minute interval).
 REFRESH_HOURS = 8
+REFRESH_TIMES = tuple(f"{hour:02d}:00" for hour in range(0, 24, REFRESH_HOURS))
+# `update_entity` answers only once every page has been scraped: give it more time than the
+# client's default, or the refresh is reported as failed while HA is still working.
+REFRESH_TIMEOUT = 120.0
 
 # All scrape sensors following the naming convention, with their config entry and URL.
 TRACKER_TEMPLATE = """
@@ -160,6 +164,12 @@ class TrackerService:
         self._events = events
         # Called after products or links change (e.g. to update the notification triggers).
         self._listeners: list[Callable[[], Awaitable[None]]] = []
+        # One refresh at a time (scheduled or /tracker_aggiorna): shops rate-limit requests.
+        self._refresh_lock = asyncio.Lock()
+
+    @property
+    def refreshing(self) -> bool:
+        return self._refresh_lock.locked()
 
     def on_change(self, listener: Callable[[], Awaitable[None]]) -> None:
         self._listeners.append(listener)
@@ -278,18 +288,28 @@ class TrackerService:
                 return product
         return None
 
-    async def refresh(self) -> None:
-        """Ask Home Assistant to scrape every tracked page now (one request per link)."""
-        entities = [
-            link.entities.get(KIND_PRICE) or next(iter(link.entities.values()))
-            for product in await self.products()
-            for link in product.links
-            if link.entities
-        ]
-        if entities:
-            await self._ha.call_service(
-                "homeassistant", "update_entity", {"entity_id": sorted(entities)}
-            )
+    async def refresh(self) -> int | None:
+        """Ask Home Assistant to scrape every tracked page now (one request per link).
+
+        Returns the number of pages, or None if another refresh is still running.
+        """
+        if self._refresh_lock.locked():
+            return None
+        async with self._refresh_lock:
+            entities = [
+                link.entities.get(KIND_PRICE) or next(iter(link.entities.values()))
+                for product in await self.products()
+                for link in product.links
+                if link.entities
+            ]
+            if entities:
+                await self._ha.call_service(
+                    "homeassistant",
+                    "update_entity",
+                    {"entity_id": sorted(entities)},
+                    request_timeout=REFRESH_TIMEOUT,
+                )
+            return len(entities)
 
     async def configure_entries(self) -> None:
         """Bring the scrape entries of tracked links in line with their shop profile.

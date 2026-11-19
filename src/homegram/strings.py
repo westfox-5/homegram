@@ -65,12 +65,19 @@ TRACKER_TITLE = "📈 <b>Tracker prezzi</b> ({count})"
 TRACKER_EMPTY = "📈 Nessun prodotto tracciato.\nAggiungine uno con /tracker_aggiungi."
 TRACKER_FOOTER = (
     "<i>In grassetto il prezzo migliore tra i negozi con disponibilità. "
-    "Home Assistant aggiorna ogni ~10 min.</i>"
+    "Le pagine si aggiornano alle {times}; /tracker_aggiorna per farlo ora.</i>"
 )
 TRACKER_NO_PRICE = "—"
 TRACKER_STOCK_UNKNOWN = "❔ n.d."
 TRACKER_STOCK_OUT = "❌ esaurito"
 TRACKER_BTN_REFRESH = "🔄 Aggiorna"
+TRACKER_REFRESHING = "🔄 Aggiorno le pagine dei negozi…"
+TRACKER_REFRESH_BUSY = "⏳ Sto già aggiornando le pagine, riprova tra poco."
+TRACKER_REFRESHED = "✅ Pagine aggiornate ({count})."
+TRACKER_REFRESH_FAILED = (
+    "⚠️ Home Assistant non ha risposto in tempo: le pagine potrebbero aggiornarsi lo stesso, "
+    "riprova /tracker tra qualche minuto."
+)
 TRACKER_BTN_CONFIRM = "🗑 Sì, elimina"
 TRACKER_BTN_CANCEL = "↩️ Annulla"
 TRACKER_USAGE = (

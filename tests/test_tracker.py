@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -15,6 +16,7 @@ from homegram.features.tracker.handlers import (
     split_args,
 )
 from homegram.features.tracker.service import (
+    REFRESH_TIMEOUT,
     TrackerError,
     TrackerService,
     clean_product_name,
@@ -162,6 +164,7 @@ def test_render_products() -> None:
     assert markup is not None
     data = [b.callback_data for r in markup.inline_keyboard for b in r]
     assert "trk:rm:e1" in data and all(len(d.encode()) <= 64 for d in data)
+    assert "00:00, 08:00 e 16:00" in text and "/tracker_aggiorna" in text
 
 
 def test_render_empty() -> None:
@@ -271,10 +274,32 @@ async def test_refresh_updates_one_entity_per_link(ha: HomeAssistantClient) -> N
     update = respx.post(f"{BASE}/api/services/homeassistant/update_entity").mock(
         return_value=httpx.Response(200, json=[])
     )
-    await TrackerService(ha).refresh()
+    assert await TrackerService(ha).refresh() == 2
     assert json.loads(update.calls.last.request.content) == {
         "entity_id": ["sensor.u7_amz_prezzo", "sensor.u7_wisp_prezzo"]
     }
+    assert update.calls.last.request.extensions["timeout"]["read"] == REFRESH_TIMEOUT
+
+
+@respx.mock
+async def test_refresh_runs_once_at_a_time(ha: HomeAssistantClient) -> None:
+    mock_template(ROWS)
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def slow(_request: httpx.Request) -> httpx.Response:
+        started.set()
+        await release.wait()
+        return httpx.Response(200, json=[])
+
+    update = respx.post(f"{BASE}/api/services/homeassistant/update_entity").mock(side_effect=slow)
+    service = TrackerService(ha)
+    first = asyncio.create_task(service.refresh())
+    await started.wait()
+    assert service.refreshing
+    assert await service.refresh() is None
+    release.set()
+    assert await first == 2
+    assert not service.refreshing and update.call_count == 1
 
 
 def options_form(flow_id: str, headers: dict[str, str] | None) -> dict[str, Any]:

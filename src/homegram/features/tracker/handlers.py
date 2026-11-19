@@ -1,4 +1,5 @@
-"""Price tracker: /tracker, /tracker_aggiungi, /tracker_rimuovi, /tracker_notifiche.
+"""Price tracker: /tracker, /tracker_aggiungi, /tracker_aggiorna, /tracker_rimuovi and
+/tracker_notifiche.
 
 Requires Home Assistant (scrape integration, companion app for notifications).
 """
@@ -20,6 +21,7 @@ from homegram.features.base import Feature
 from homegram.features.topics import topic_label
 from homegram.features.tracker import watch
 from homegram.features.tracker.service import (
+    REFRESH_TIMES,
     Product,
     TrackedLink,
     TrackerError,
@@ -96,11 +98,15 @@ def render_products(products: list[Product]) -> tuple[str, InlineKeyboardMarkup 
             rows.append(
                 [InlineKeyboardButton(label, callback_data=f"{CALLBACK_PREFIX}:rm:{link.entry_id}")]
             )
-    lines += ["", strings.TRACKER_FOOTER]
+    lines += ["", strings.TRACKER_FOOTER.format(times=_join_times(REFRESH_TIMES))]
     rows.append(
         [InlineKeyboardButton(strings.TRACKER_BTN_REFRESH, callback_data=f"{CALLBACK_PREFIX}:ls")]
     )
     return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _join_times(times: tuple[str, ...]) -> str:
+    return f"{', '.join(times[:-1])} e {times[-1]}" if len(times) > 1 else times[0]
 
 
 def supported_shops() -> str:
@@ -180,6 +186,32 @@ async def tracker_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _guard_ha(update, exc)
         return
     await _reply(update, text, markup)
+
+
+async def refresh_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Scrape every tracked page now, then show the updated list."""
+    service = _service(context)
+    if service.refreshing:
+        await _reply(update, strings.TRACKER_REFRESH_BUSY)
+        return
+    message = await update.effective_message.reply_text(strings.TRACKER_REFRESHING)
+    await update.effective_chat.send_action(ChatAction.TYPING)
+    try:
+        count = await service.refresh()
+        if count is None:
+            text, markup = strings.TRACKER_REFRESH_BUSY, None
+        else:
+            text, markup = render_products(await service.products())
+            text = f"{strings.TRACKER_REFRESHED.format(count=count)}\n\n{text}"
+    except HomeAssistantError as exc:
+        if exc.forbidden:
+            text, markup = strings.TRACKER_ERR_FORBIDDEN, None
+        else:
+            log.warning("Manual tracker refresh failed: %s", exc)
+            text, markup = strings.TRACKER_REFRESH_FAILED, None
+    await message.edit_text(
+        text, parse_mode=ParseMode.HTML, reply_markup=markup, link_preview_options=NO_PREVIEW
+    )
 
 
 # --- /tracker_aggiungi: arguments, or follow-up questions for the missing ones ---------
@@ -580,6 +612,7 @@ def register_answers() -> None:
 def register(app: Application) -> None:
     app.add_handler(CommandHandler("tracker", tracker_command))
     app.add_handler(CommandHandler("tracker_aggiungi", add_command))
+    app.add_handler(CommandHandler("tracker_aggiorna", refresh_command, block=False))
     app.add_handler(CommandHandler("tracker_rimuovi", remove_command))
     app.add_handler(CommandHandler("tracker_notifiche", notifications_command))
     app.add_handler(CallbackQueryHandler(on_callback, pattern=rf"^{CALLBACK_PREFIX}:"))
@@ -594,6 +627,7 @@ FEATURE = Feature(
     commands=[
         ("tracker", "prezzi e disponibilità dei prodotti tracciati"),
         ("tracker_aggiungi", "traccia un prodotto: ti chiedo link e nome"),
+        ("tracker_aggiorna", "aggiorna adesso prezzi e disponibilità dai negozi"),
         ("tracker_rimuovi", "smetti di tracciare un prodotto"),
         ("tracker_notifiche", "dove arrivano le notifiche e quali prodotti silenziare"),
     ],

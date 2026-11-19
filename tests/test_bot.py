@@ -5,7 +5,13 @@ from homegram.bot import build_application
 from homegram.config import Settings
 from homegram.features import FEATURES, enabled_features
 
-TRACKER_COMMANDS = {"tracker", "tracker_aggiungi", "tracker_rimuovi", "tracker_notifiche"}
+TRACKER_COMMANDS = {
+    "tracker",
+    "tracker_aggiungi",
+    "tracker_aggiorna",
+    "tracker_rimuovi",
+    "tracker_notifiche",
+}
 
 
 def registered_commands(app) -> set[str]:  # type: ignore[no-untyped-def]
